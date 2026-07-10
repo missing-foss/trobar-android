@@ -1,3 +1,7 @@
+import java.security.KeyStore
+import java.security.MessageDigest
+import java.security.cert.X509Certificate
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -22,10 +26,33 @@ android {
         create("release") {
             val keystorePath = System.getenv("TROBAR_KEYSTORE") ?: "release.keystore"
             val keystorePass = System.getenv("TROBAR_KEYSTORE_PASSWORD") ?: ""
+            val alias = System.getenv("TROBAR_KEY_ALIAS") ?: "trobar"
             storeFile = file(keystorePath)
             storePassword = keystorePass
-            keyAlias = System.getenv("TROBAR_KEY_ALIAS") ?: "trobar"
+            keyAlias = alias
             keyPassword = System.getenv("TROBAR_KEY_PASSWORD") ?: keystorePass
+            // Guard: every release must be signed with the canonical Trobar key.
+            // If TROBAR_KEYSTORE is ever pointed at the archived legacy key (or
+            // any other), the fingerprint won't match and the build fails loudly
+            // rather than shipping an unupdatable APK. Only runs when a keystore
+            // password is present (i.e. a real release build); debug/CI skip it.
+            // The fingerprint is public (published in the README) — not a secret.
+            if (keystorePass.isNotEmpty() && file(keystorePath).exists()) {
+                val expected = "674aea874ab6996a0447102939715707e95ddb00ed043e2b4e22837307f0f376"
+                val ks = KeyStore.getInstance("PKCS12")
+                file(keystorePath).inputStream().use { ks.load(it, keystorePass.toCharArray()) }
+                val cert = ks.getCertificate(alias) as? X509Certificate
+                    ?: throw GradleException("Alias '$alias' not found in $keystorePath")
+                val fp = MessageDigest.getInstance("SHA-256")
+                    .digest(cert.encoded)
+                    .joinToString("") { b -> "%02x".format(b) }
+                if (fp != expected) {
+                    throw GradleException(
+                        "Release keystore fingerprint $fp does not match the canonical " +
+                        "Trobar signing key ($expected). Refusing to build — point " +
+                        "TROBAR_KEYSTORE at the current key, not the archived legacy one.")
+                }
+            }
         }
     }
 

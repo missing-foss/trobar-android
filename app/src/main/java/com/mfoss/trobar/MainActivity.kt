@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -46,6 +47,7 @@ import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.HideImage
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
@@ -114,6 +116,7 @@ import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -137,8 +140,10 @@ class MainActivity : ComponentActivity() {
         val pairing by Prefs.pairing(this).collectAsState(initial = NOT_LOADED)
         val treeUri by Prefs.treeUri(this).collectAsState(initial = null)
         var showSettings by remember { mutableStateOf(false) }
+        var showAbout by remember { mutableStateOf(false) }
 
         when {
+            showAbout -> AboutScreen(onBack = { showAbout = false })
             pairing === NOT_LOADED -> Unit // still loading prefs, render nothing yet
             pairing == null -> PairingScreen(onPaired = { url, token ->
                 lifecycleScope.launch { Prefs.setPairing(this@MainActivity, url, token) }
@@ -157,6 +162,7 @@ class MainActivity : ComponentActivity() {
                 pairing = pairing!!,
                 treeUri = treeUri!!,
                 onBack = { showSettings = false },
+                onOpenAbout = { showAbout = true },
                 onServerUrlChanged = { url -> lifecycleScope.launch { Prefs.setServerUrl(this@MainActivity, url) } },
                 onFolderChanged = { newUri ->
                     try {
@@ -788,6 +794,7 @@ fun SettingsScreen(
     pairing: Prefs.Pairing,
     treeUri: String,
     onBack: () -> Unit,
+    onOpenAbout: () -> Unit,
     onServerUrlChanged: (String) -> Unit,
     onFolderChanged: (Uri) -> Unit,
     onUnpair: () -> Unit,
@@ -1099,6 +1106,17 @@ fun SettingsScreen(
                 }
             }
 
+            // About section (gitea#71)
+            SectionLabel(stringResource(R.string.section_about))
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                TileRow(
+                    Icons.Filled.Info,
+                    stringResource(R.string.about_tile_label),
+                    appVersionName(context),
+                    onClick = onOpenAbout,
+                )
+            }
+
             OutlinedButton(
                 onClick = { showUnpairConfirm = true },
                 modifier = Modifier.fillMaxWidth(),
@@ -1106,6 +1124,172 @@ fun SettingsScreen(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
             ) {
                 Text(stringResource(R.string.unpair_device_button))
+            }
+        }
+    }
+}
+
+private fun appVersionName(context: android.content.Context): String =
+    try {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "?"
+    } catch (e: Exception) { "?" }
+
+private fun readAsset(context: android.content.Context, name: String): String =
+    try {
+        context.assets.open(name).bufferedReader().use { it.readText() }
+    } catch (e: Exception) { "" }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AboutScreen(onBack: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    var checking by remember { mutableStateOf(false) }
+    var updateStatus by remember { mutableStateOf<String?>(null) }
+    var updateAvailable by remember { mutableStateOf(false) }
+    var shownDoc by remember { mutableStateOf<String?>(null) } // asset name, or null
+
+    fun openUrl(url: String) {
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (e: Exception) { /* no browser — nothing sensible to do */ }
+    }
+
+    // User-initiated only (gitea#71): one GitHub API call per button press,
+    // never automatic — consistent with the no-telemetry stance.
+    fun checkForUpdate() {
+        scope.launch {
+            checking = true
+            updateStatus = context.getString(R.string.update_checking)
+            updateAvailable = false
+            updateStatus = try {
+                val latest = withContext(Dispatchers.IO) {
+                    val req = okhttp3.Request.Builder()
+                        .url("https://api.github.com/repos/missing-foss/trobar-android/releases/latest")
+                        .build()
+                    OkHttpClient().newCall(req).execute().use { resp ->
+                        if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
+                        org.json.JSONObject(resp.body!!.string()).optString("tag_name")
+                    }
+                }
+                val latestVersion = latest.removePrefix("android-v")
+                if (latestVersion.isNotEmpty() && latestVersion != appVersionName(context)) {
+                    updateAvailable = true
+                    context.getString(R.string.update_available, latest)
+                } else {
+                    context.getString(R.string.update_up_to_date, appVersionName(context))
+                }
+            } catch (e: Exception) {
+                context.getString(R.string.update_check_failed, e.message ?: "?")
+            }
+            checking = false
+        }
+    }
+
+    shownDoc?.let { asset ->
+        AlertDialog(
+            onDismissRequest = { shownDoc = null },
+            title = {
+                Text(stringResource(
+                    if (asset == "LICENSE") R.string.license_dialog_title else R.string.notices_dialog_title))
+            },
+            text = {
+                val docText = remember(asset) { readAsset(context, asset) }
+                Text(
+                    docText,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .heightIn(max = 420.dp),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { shownDoc = null }) { Text(stringResource(R.string.close_button)) }
+            },
+        )
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.about_title)) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back_content_description))
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            AppLogo(size = 84.dp)
+            Text(trobarWordmark(), fontFamily = FredokaFamily, fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.headlineSmall)
+            Text(
+                stringResource(R.string.about_version, appVersionName(context)),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.outline,
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { checkForUpdate() }, enabled = !checking) {
+                    Text(stringResource(R.string.check_updates_button))
+                }
+                // Liberapay's brand yellow — a vendored "button", no external
+                // widget script (gitea#71 decision).
+                Button(
+                    onClick = { openUrl("https://liberapay.com/Trobar/donate") },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFF6C915), contentColor = Color(0xFF1A171B)),
+                ) {
+                    Text(stringResource(R.string.donate_button))
+                }
+            }
+            updateStatus?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (updateAvailable) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                )
+            }
+
+            SectionLabel(stringResource(R.string.about_links_section))
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                TileRow(Icons.Filled.Info, stringResource(R.string.about_documentation), "",
+                    onClick = { openUrl("https://github.com/missing-foss/trobar-server/blob/main/docs/clients.md") })
+                HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
+                TileRow(Icons.Filled.Cloud, stringResource(R.string.about_source_code), "",
+                    onClick = { openUrl("https://github.com/missing-foss/trobar-android") })
+                HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
+                TileRow(Icons.Filled.Settings, stringResource(R.string.about_report_issue), "",
+                    onClick = { openUrl("https://github.com/missing-foss/trobar-android/issues/new/choose") })
+                HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
+                TileRow(Icons.Filled.Storage, stringResource(R.string.about_releases), "",
+                    onClick = { openUrl("https://github.com/missing-foss/trobar-android/releases") })
+            }
+
+            SectionLabel(stringResource(R.string.about_licenses_section))
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.about_license_summary), style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { shownDoc = "LICENSE" }) {
+                            Text(stringResource(R.string.show_license_button))
+                        }
+                        OutlinedButton(onClick = { shownDoc = "THIRD_PARTY_NOTICES.md" }) {
+                            Text(stringResource(R.string.show_notices_button))
+                        }
+                    }
+                }
             }
         }
     }

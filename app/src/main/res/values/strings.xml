@@ -113,4 +113,28 @@
     <string name="notification_channel_name">Sync</string>
     <string name="notification_sync_progress">Sync: %1$d / %2$d</string>
     <string name="transcode_needs_desktop">%1$d track(s) need transcoding — sync this device with the Trobar desktop app</string>
+
+    <!-- About screen (gitea#71) -->
+    <string name="section_about">About</string>
+    <string name="about_tile_label">About Trobar</string>
+    <string name="about_title">About</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="check_updates_button">Check for updates</string>
+    <string name="update_checking">Checking…</string>
+    <string name="update_available">Update available: %1$s — see Releases.</string>
+    <string name="update_up_to_date">You are running the latest release (%1$s).</string>
+    <string name="update_check_failed">Could not reach GitHub (%1$s) — try again later.</string>
+    <string name="donate_button">Donate</string>
+    <string name="about_links_section">Links</string>
+    <string name="about_documentation">Documentation</string>
+    <string name="about_source_code">Source code</string>
+    <string name="about_report_issue">Report an issue or request a feature</string>
+    <string name="about_releases">Releases</string>
+    <string name="about_licenses_section">Licenses</string>
+    <string name="about_license_summary">Trobar for Android is free software under the GNU GPL, version 3 or later. Bundled fonts and libraries keep their own licenses.</string>
+    <string name="show_license_button">License</string>
+    <string name="show_notices_button">Third-party</string>
+    <string name="license_dialog_title">License (GPL-3.0-or-later)</string>
+    <string name="notices_dialog_title">Third-party notices</string>
+    <string name="close_button">Close</string>
 </resources>

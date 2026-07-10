@@ -113,4 +113,28 @@
     <string name="notification_channel_name">Synchronisation</string>
     <string name="notification_sync_progress">Synchronisation : %1$d / %2$d</string>
     <string name="transcode_needs_desktop">%1$d morceau(x) à convertir — synchronisez cet appareil avec l\'application de bureau Trobar</string>
+
+    <!-- About screen (gitea#71) -->
+    <string name="section_about">À propos</string>
+    <string name="about_tile_label">À propos de Trobar</string>
+    <string name="about_title">À propos</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="check_updates_button">Vérifier les mises à jour</string>
+    <string name="update_checking">Vérification…</string>
+    <string name="update_available">Mise à jour disponible : %1$s — voir les versions publiées.</string>
+    <string name="update_up_to_date">Vous utilisez la dernière version (%1$s).</string>
+    <string name="update_check_failed">Impossible de joindre GitHub (%1$s) — réessayez plus tard.</string>
+    <string name="donate_button">Faire un don</string>
+    <string name="about_links_section">Liens</string>
+    <string name="about_documentation">Documentation</string>
+    <string name="about_source_code">Code source</string>
+    <string name="about_report_issue">Signaler un problème ou proposer une fonctionnalité</string>
+    <string name="about_releases">Versions publiées</string>
+    <string name="about_licenses_section">Licences</string>
+    <string name="about_license_summary">Trobar pour Android est un logiciel libre sous licence GNU GPL, version 3 ou ultérieure. Les polices et bibliothèques intégrées conservent leurs propres licences.</string>
+    <string name="show_license_button">Licence</string>
+    <string name="show_notices_button">Composants tiers</string>
+    <string name="license_dialog_title">Licence (GPL-3.0-or-later)</string>
+    <string name="notices_dialog_title">Mentions des composants tiers</string>
+    <string name="close_button">Fermer</string>
 </resources>

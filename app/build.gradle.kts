@@ -14,8 +14,8 @@ android {
         applicationId = "com.mfoss.trobar"
         minSdk = 26
         targetSdk = 34
-        versionCode = 36
-        versionName = "2.4.1"
+        versionCode = 37
+        versionName = "2.5.0"
     }
 
     signingConfigs {

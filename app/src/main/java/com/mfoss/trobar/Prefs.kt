@@ -30,7 +30,7 @@ object Prefs {
     const val NETWORK_WIFI_AND_MOBILE = "wifi_and_mobile"
     const val NETWORK_ANY = "any"
 
-    // gitea#49 — what to do when a sync finds a track it believed was
+    // what to do when a sync finds a track it believed was
     // already downloaded missing on disk (deleted directly on the device).
     const val MISSING_ASK = "ask"
     const val MISSING_ALWAYS_RESYNC = "always_resync"
@@ -41,8 +41,8 @@ object Prefs {
     fun pairing(context: Context): Flow<Pairing?> =
         context.dataStore.data.map { prefs ->
             val url = prefs[SERVER_URL]
-            // Token is Keystore-encrypted at rest (gitea#54); decrypt transparently.
-            // A legacy plaintext token (pre-#54, no PREFIX) is returned as-is so
+            // Token is Keystore-encrypted at rest; decrypt transparently.
+            // A legacy plaintext token (no PREFIX) is returned as-is so
             // existing pairings keep working until migrateTokenIfNeeded() upgrades
             // them. A decrypt failure (lost key) yields null → treated as unpaired.
             val stored = prefs[TOKEN]
@@ -58,9 +58,9 @@ object Prefs {
         }
     }
 
-    /** One-time upgrade for installs paired before #54: re-store a legacy
-     *  plaintext token encrypted, so existing devices gain Keystore protection
-     *  without a re-pair. No-op once the stored token is already encrypted. */
+    /** One-time upgrade for installs paired by an older version: re-store a
+     *  legacy plaintext token encrypted, so existing devices gain Keystore
+     *  protection without a re-pair. No-op once the token is encrypted. */
     suspend fun migrateTokenIfNeeded(context: Context) {
         // Best-effort: a Keystore hiccup here must never crash startup — if it
         // fails the token just stays plaintext (still functional) until next time.
@@ -109,7 +109,7 @@ object Prefs {
         }
     }
 
-    /** Manual dismiss for the persistent "last error" line (gitea#43) — a
+    /** Manual dismiss for the persistent "last error" line — a
      * clean sync already clears it, but a recurring failure would otherwise
      * pin the message to the status screen with no way to acknowledge it. */
     suspend fun clearSyncError(context: Context) {
@@ -130,7 +130,7 @@ object Prefs {
         context.dataStore.edit { it[DYNAMIC_COLOR] = enabled }
     }
 
-    // gitea#127: the artist-pictures setting moved to the device (web UI,
+    // the artist-pictures setting moved to the device (web UI,
     // /api/device/info) — the old local pref is retired; its stored value
     // is simply ignored by this version.
 

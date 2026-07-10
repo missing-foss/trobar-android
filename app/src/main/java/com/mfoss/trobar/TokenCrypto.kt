@@ -12,7 +12,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 /**
  * Wraps the device pairing token in Android Keystore-backed AES-256-GCM before
- * it is persisted (gitea#54). The AES key is generated inside the AndroidKeyStore
+ * it is persisted. The AES key is generated inside the AndroidKeyStore
  * and is non-exportable — hardware-backed (TEE/StrongBox) where the device
  * supports it — so the token is no longer recoverable from a raw dump of the
  * app's storage: extracting it requires live code execution *as this app* on the
@@ -31,7 +31,7 @@ object TokenCrypto {
     private const val TAG_BITS = 128
 
     /** Marks a value produced by [encrypt]; lets us tell it apart from a
-     *  legacy plaintext token written before #54 (base64url tokens never
+     * legacy plaintext token written by an older version (base64url tokens never
      *  contain a colon). */
     const val PREFIX = "v1:"
 

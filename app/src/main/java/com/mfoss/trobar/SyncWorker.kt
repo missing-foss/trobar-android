@@ -70,7 +70,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             }
         }
 
-        // gitea#49 — only ever non-empty when missingFileBehavior is "ask";
+        // only ever non-empty when missingFileBehavior is "ask";
         // overwritten every run (not merged) so a batch the user already
         // resolved via StatusScreen doesn't linger if this run found none.
         val missingJson = JSONArray().apply {
@@ -176,7 +176,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         }
 
         /** User explicitly tapped "sync now" — still respects the same
-         * Wi-Fi/+Mobile/+Roaming preference as auto-sync (gitea#17: this
+         * Wi-Fi/+Mobile/+Roaming preference as auto-sync (this
          * used to hardcode NetworkType.CONNECTED, so a manual tap could
          * burn cellular data even with auto-sync restricted to Wi-Fi-only —
          * one shared setting rather than a second independent one, decided

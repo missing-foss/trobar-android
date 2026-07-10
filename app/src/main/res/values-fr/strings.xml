@@ -114,7 +114,7 @@
     <string name="notification_sync_progress">Synchronisation : %1$d / %2$d</string>
     <string name="transcode_needs_desktop">%1$d morceau(x) à convertir — synchronisez cet appareil avec l\'application de bureau Trobar</string>
 
-    <!-- About screen (gitea#71) -->
+    <!-- About screen -->
     <string name="section_about">À propos</string>
     <string name="about_tile_label">À propos de Trobar</string>
     <string name="about_title">À propos</string>

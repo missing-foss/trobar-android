@@ -18,7 +18,7 @@ data class TrackRef(val trackId: Long, val relativePath: String, val size: Long,
 data class TrackDeleteRef(val trackId: Long, val relativePath: String)
 data class Changes(val toDownload: List<TrackRef>, val toDelete: List<TrackDeleteRef>, val downloaded: List<TrackRef>,
                    val playlists: List<PlaylistRef> = emptyList())
-/** gitea#118 — a server-generated .m3u8 for one playlist assigned to this device. */
+/** a server-generated.m3u8 for one playlist assigned to this device. */
 data class PlaylistRef(val name: String, val filename: String, val content: String)
 data class DeviceInfo(val name: String, val maxSizeBytes: Long?, val deviceType: String,
                       val artistImages: String? = null)
@@ -122,7 +122,7 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
         }
     }
 
-    /** gitea#49 — reports the user's (or a standing preference's) decision
+    /** Reports the user's (or a standing preference's) decision
      * about tracks the server believed were already downloaded but were
      * found missing on disk: `redownload` flips them back to pending,
      * `exclude` stops them being silently re-queued without touching
@@ -184,7 +184,7 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
     fun downloadArtistImage(artist: String, small: Boolean = false): ByteArray? {
         val url = "${baseUrl()}/api/device/artist-image?artist=" +
             java.net.URLEncoder.encode(artist, "UTF-8") +
-            if (small) "&size=small" else ""  // gitea#127
+            if (small) "&size=small" else ""
         client.newCall(authed(url).build()).execute().use { resp ->
             if (!resp.isSuccessful) return null
             return resp.body?.bytes()

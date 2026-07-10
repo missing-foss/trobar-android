@@ -1,7 +1,7 @@
 # Third-Party Notices
 
 Trobar redistributes the third-party components listed below — bundled fonts, the
-vendored web front-end libraries (see gitea#64), the Android app's compiled
+vendored web front-end libraries, the Android app's compiled
 dependencies, and the server's Python runtime dependencies. Each is provided
 under its own license, reproduced here. Trobar's own code is under the license in
 the repository's `LICENSE` file; nothing below changes that.
@@ -32,7 +32,7 @@ names have been used for any modified version (the fonts are shipped unmodified)
 
 ## 2. Web front-end libraries — MIT License
 
-Vendored under `app/static/` so the app loads nothing from a CDN (gitea#64):
+Vendored under `app/static/` so the app loads nothing from a CDN:
 
 - **Tailwind CSS** 3.4.17 (`app/static/css/tailwind.css`, built with the
   standalone CLI) — Copyright (c) Tailwind Labs, Inc.

@@ -10,7 +10,7 @@ import androidx.compose.ui.text.font.FontWeight
 // OFL-licensed) rather than relying on the Downloadable Fonts API — keeps the
 // app working the same on de-Googled devices, no Play Services dependency.
 // The SIL OFL 1.1 text and per-family copyright notices ship inside the APK at
-// assets/THIRD_PARTY_NOTICES.md (gitea#58), satisfying OFL's attribution term.
+// assets/THIRD_PARTY_NOTICES.md, satisfying OFL's attribution term.
 
 internal val FredokaFamily = FontFamily(
     Font(R.font.fredoka_semibold, FontWeight.SemiBold),

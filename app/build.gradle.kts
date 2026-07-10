@@ -8,14 +8,14 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        // Renamed from the pre-Trobar applicationId (gitea#66) — a new id, so
+        // Renamed from the pre-Trobar applicationId — a new id, so
         // this is a fresh app to stores/Obtainium; existing installs don't
         // auto-update and must be reinstalled + re-paired.
         applicationId = "com.mfoss.trobar"
         minSdk = 26
         targetSdk = 34
-        versionCode = 37
-        versionName = "2.5.0"
+        versionCode = 38
+        versionName = "2.5.1"
     }
 
     signingConfigs {

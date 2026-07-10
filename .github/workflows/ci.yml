@@ -1,5 +1,5 @@
-# Android CI (gitea#92) — paths assume this directory is the repo root,
-# which it becomes after the #38 split (android/ -> its own repository).
+# Android CI — paths assume this directory is the repo root,
+# which it becomes after the public split (android/ -> its own repository).
 # NO release keystore in CI — release builds stay local (see
 # docs/github-org-setup.md section 8). Read-only token, pinned majors.
 name: ci

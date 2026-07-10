@@ -123,7 +123,7 @@ import org.json.JSONObject
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Upgrade any pre-#54 plaintext token to Keystore-encrypted at rest.
+        // Upgrade any legacy plaintext token to Keystore-encrypted at rest.
         lifecycleScope.launch { Prefs.migrateTokenIfNeeded(this@MainActivity) }
         setContent {
             val dynamicColor by Prefs.useDynamicColor(this).collectAsState(initial = false)
@@ -199,7 +199,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** "The Bard" mark (gitea#68): an original troubadour mid-strum on a lute
+/** "The Bard" mark: an original troubadour mid-strum on a lute
  * whose rosette carries the Side A burgundy label. A single flat artwork —
  * no more plinth/disc/tonearm layering, and nothing rotates. While syncing,
  * musical notes rise from the lute's soundhole (three staggered copies,
@@ -407,7 +407,7 @@ fun FolderPickerScreen(onPicked: (android.net.Uri) -> Unit) {
     }
 }
 
-// gitea#49 — one entry of the "found missing locally, awaiting a decision"
+// one entry of the "found missing locally, awaiting a decision"
 // batch persisted by SyncWorker (see Prefs.pendingMissingTracks).
 data class MissingTrackInfo(val trackId: Long, val relativePath: String)
 
@@ -555,7 +555,7 @@ fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit) {
                     // persisted last-error pref AND WorkManager's FAILED record.
                     // Show one line (current run's failure wins over the stored
                     // one) and have dismiss clear both — with two lines only the
-                    // first was dismissable (gitea#43 follow-up).
+                    // first was dismissable (follow-up).
                     (failureText ?: lastSyncError?.let { stringResource(R.string.last_error, it) })?.let { msg ->
                         CopyableError(
                             msg,
@@ -629,7 +629,7 @@ fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit) {
 
 private fun formatGB(bytes: Long?): String = if (bytes == null) "?" else "%.1f".format(bytes / 1e9)
 
-/** Mirrors the web UI's deviceIconSvg() mapping (gitea#32/#33) — phone,
+/** Mirrors the web UI's deviceIconSvg mapping — phone,
  * tablet, watch, dap (dedicated audio player), sdcard (bare card). 'android'
  * kept as a phone-equivalent alias for the same pre-migration-row reason the
  * web side keeps it: harmless fallback, not the current default. */
@@ -1014,7 +1014,7 @@ fun SettingsScreen(
             // Synchronisation section
             SectionLabel(stringResource(R.string.section_sync))
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                // gitea#127: artist pictures are configured per device in the
+                // artist pictures are configured per device in the
                 // web UI now (off/small/full) — no local toggle. .nomedia
                 // stays local: it's about this phone's gallery.
                 SwitchRow(
@@ -1106,7 +1106,7 @@ fun SettingsScreen(
                 }
             }
 
-            // About section (gitea#71)
+            // About section
             SectionLabel(stringResource(R.string.section_about))
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 TileRow(
@@ -1155,7 +1155,7 @@ fun AboutScreen(onBack: () -> Unit) {
         } catch (e: Exception) { /* no browser — nothing sensible to do */ }
     }
 
-    // User-initiated only (gitea#71): one GitHub API call per button press,
+    // User-initiated only: one GitHub API call per button press,
     // never automatic — consistent with the no-telemetry stance.
     fun checkForUpdate() {
         scope.launch {
@@ -1195,13 +1195,17 @@ fun AboutScreen(onBack: () -> Unit) {
             },
             text = {
                 val docText = remember(asset) { readAsset(context, asset) }
+                // heightIn first (bounds the viewport), THEN verticalScroll —
+                // the reverse order just truncates the text with nothing to
+                // scroll. fillMaxWidth so long license lines wrap.
                 Text(
                     docText,
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                     modifier = Modifier
-                        .verticalScroll(rememberScrollState())
-                        .heightIn(max = 420.dp),
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
                 )
             },
             confirmButton = {
@@ -1245,7 +1249,7 @@ fun AboutScreen(onBack: () -> Unit) {
                     Text(stringResource(R.string.check_updates_button))
                 }
                 // Liberapay's brand yellow — a vendored "button", no external
-                // widget script (gitea#71 decision).
+                // widget script (a deliberate no-CDN choice).
                 Button(
                     onClick = { openUrl("https://liberapay.com/Trobar/donate") },
                     colors = ButtonDefaults.buttonColors(

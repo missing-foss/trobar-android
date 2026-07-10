@@ -114,7 +114,7 @@
     <string name="notification_sync_progress">Sync: %1$d / %2$d</string>
     <string name="transcode_needs_desktop">%1$d track(s) need transcoding — sync this device with the Trobar desktop app</string>
 
-    <!-- About screen (gitea#71) -->
+    <!-- About screen -->
     <string name="section_about">About</string>
     <string name="about_tile_label">About Trobar</string>
     <string name="about_title">About</string>

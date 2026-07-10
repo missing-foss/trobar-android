@@ -629,7 +629,7 @@ fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit) {
 
 private fun formatGB(bytes: Long?): String = if (bytes == null) "?" else "%.1f".format(bytes / 1e9)
 
-/** Mirrors the web UI's deviceIconSvg mapping — phone,
+/** Mirrors the web UI's deviceIconSvg() mapping — phone,
  * tablet, watch, dap (dedicated audio player), sdcard (bare card). 'android'
  * kept as a phone-equivalent alias for the same pre-migration-row reason the
  * web side keeps it: harmless fallback, not the current default. */

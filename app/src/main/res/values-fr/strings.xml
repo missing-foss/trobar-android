@@ -1,0 +1,116 @@
+<resources>
+    <string name="app_name">Trobar</string>
+
+    <string name="internal_storage_prefix">Stockage interne/</string>
+
+    <string name="pairing_title">Associer cet appareil</string>
+    <string name="pairing_subtitle">Scanne le QR code dans Trobar ou\nsaisis les informations manuellement.</string>
+    <string name="scan_qr_button">Scanner le QR code</string>
+    <string name="server_url_label">URL du serveur</string>
+    <string name="token_label">Token</string>
+    <string name="validate_button">Valider</string>
+    <string name="copy_error_button">Copier l\'erreur</string>
+    <string name="clear_error_button">Effacer</string>
+
+    <string name="folder_picker_title">Dossier de synchronisation</string>
+    <string name="folder_picker_subtitle">C\'est là que tes morceaux seront téléchargés.</string>
+    <string name="choose_folder_button">Choisir un dossier</string>
+
+    <string name="sync_failure">Échec : %1$s</string>
+    <plurals name="sync_downloaded">
+        <item quantity="one">%1$d téléchargé</item>
+        <item quantity="other">%1$d téléchargés</item>
+    </plurals>
+    <plurals name="sync_deleted">
+        <item quantity="one">%1$d supprimé</item>
+        <item quantity="other">%1$d supprimés</item>
+    </plurals>
+    <plurals name="sync_failed">
+        <item quantity="one">%1$d échec</item>
+        <item quantity="other">%1$d échecs</item>
+    </plurals>
+
+    <string name="settings_title">Réglages</string>
+    <string name="sync_in_progress">Synchronisation en cours…</string>
+    <string name="tap_logo_to_sync">Touche le logo pour synchroniser</string>
+    <string name="sync_progress_count">%1$d / %2$d</string>
+    <string name="last_sync">Dernière synchro : %1$s</string>
+    <string name="never">jamais</string>
+    <string name="last_error">Dernière erreur : %1$s</string>
+
+    <string name="save_button">Enregistrer</string>
+    <string name="cancel_button">Annuler</string>
+    <string name="limit_saved">Limite enregistrée</string>
+    <string name="save_failed_generic">Échec de l\'enregistrement</string>
+
+    <string name="unpair_dialog_title">Dissocier cet appareil ?</string>
+    <string name="unpair_dialog_text">L\'appareil ne recevra plus de synchros tant qu\'il n\'est pas réassocié avec un nouveau QR code.</string>
+    <string name="unpair_button">Dissocier</string>
+
+    <string name="nomedia_dialog_title">Masquer de la galerie ?</string>
+    <string name="nomedia_dialog_text">Un fichier .nomedia sera créé à la racine du dossier de synchronisation. Cela masque tout son contenu — y compris la musique — pour les applications qui découvrent les fichiers via l\'index média du système (Galerie, Photos…). Les lecteurs qui scannent le dossier directement, comme Poweramp, ne sont généralement pas concernés.</string>
+    <string name="enable_button">Activer</string>
+
+    <string name="server_address_dialog_title">Adresse du serveur</string>
+    <string name="url_label">URL</string>
+    <string name="allocated_space_label">Espace alloué</string>
+    <string name="limit_gb_field_label">Limite en Go (vide = aucune)</string>
+
+    <string name="back_content_description">Retour</string>
+    <string name="this_device_label">Cet appareil</string>
+
+    <string name="section_connection">CONNEXION</string>
+    <string name="server_label">Serveur</string>
+
+    <string name="section_storage">STOCKAGE</string>
+    <string name="folder_label">Dossier</string>
+    <string name="storage_gb_value">%1$.1f Go</string>
+    <string name="unlimited">Illimité</string>
+    <string name="storage_free_of_total">%1$s Go libres sur %2$s Go</string>
+    <string name="limit_exceeds_free_space">Cette limite dépasse l\'espace libre réel !</string>
+
+    <string name="section_sync">SYNCHRONISATION</string>
+    <string name="hide_from_gallery_label">Masquer de la galerie</string>
+    <string name="hide_from_gallery_description">Utile avec des lecteurs comme Poweramp</string>
+    <string name="missing_files_label">Fichiers supprimés localement</string>
+    <string name="missing_files_description">Que faire quand un fichier synchronisé est introuvable sur cet appareil</string>
+    <string name="missing_files_ask">Me demander</string>
+    <string name="missing_files_resync">Resynchroniser</string>
+    <string name="missing_files_exclude">Laisser supprimé</string>
+    <plurals name="missing_tracks_notice">
+        <item quantity="one">%1$d morceau est introuvable localement</item>
+        <item quantity="other">%1$d morceaux sont introuvables localement</item>
+    </plurals>
+    <string name="missing_tracks_resync_button">Retélécharger</string>
+    <string name="missing_tracks_exclude_button">Marquer comme supprimé</string>
+
+    <string name="section_network">RÉSEAU</string>
+    <string name="auto_sync_via_label">Synchronisation automatique</string>
+    <string name="network_wifi">Wi-Fi uniquement</string>
+    <string name="network_wifi_and_mobile">Wi-Fi + données mobiles</string>
+    <string name="network_roaming">Wi-Fi + mobile + itinérance</string>
+
+    <string name="section_appearance">APPARENCE</string>
+    <string name="dynamic_color_label">Couleurs dynamiques</string>
+    <string name="dynamic_color_description">Thème basé sur le fond d\'écran</string>
+    <string name="language_label">Langue</string>
+    <string name="language_system">Système</string>
+
+    <string name="unpair_device_button">Dissocier cet appareil</string>
+
+    <string name="api_error_generic">%1$s — erreur HTTP %2$d</string>
+    <string name="api_error_file">file/%1$d — erreur HTTP %2$d</string>
+
+    <string name="sync_folder_not_found">Dossier de synchro introuvable — choisis-le à nouveau.</string>
+    <string name="cannot_reach_server">Impossible de contacter le serveur : %1$s</string>
+    <string name="file_creation_failed">création du fichier impossible</string>
+    <string name="empty_response">réponse vide</string>
+    <string name="write_stream_unavailable">flux d\'écriture indisponible</string>
+    <string name="download_failed">échec du téléchargement</string>
+    <string name="folder_creation_failed">création du dossier \'%1$s\' impossible</string>
+    <string name="track_error">%1$s : %2$s</string>
+
+    <string name="notification_channel_name">Synchronisation</string>
+    <string name="notification_sync_progress">Synchronisation : %1$d / %2$d</string>
+    <string name="transcode_needs_desktop">%1$d morceau(x) à convertir — synchronisez cet appareil avec l\'application de bureau Trobar</string>
+</resources>

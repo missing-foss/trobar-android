@@ -8,12 +8,25 @@ up that way server-side).
 
 ## Install
 
-[<img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="54">](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/missing-foss/trobar-android)
+**With [Obtainium](https://github.com/ImranR98/Obtainium)** (recommended — automatic updates):
+in Obtainium tap **Add App** and paste the repository URL:
 
-Grab the APK from [Releases](https://github.com/missing-foss/trobar-android/releases)
-(tags `android-vX.Y.Z`) — or add this repository to
-[Obtainium](https://github.com/ImranR98/Obtainium) for automatic updates
-(the button above deep-links it).
+```
+https://github.com/missing-foss/trobar-android
+```
+
+That's the reliable method everywhere. There's also a one-tap button:
+
+[<img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Add to Obtainium" height="54">](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/missing-foss/trobar-android)
+
+— but on hardened browsers (e.g. Vanadium on GrapheneOS) the automatic
+hand-off to Obtainium is blocked; if tapping it just sits on "Redirecting…",
+use the **"Click here if you are not redirected"** link on that page, or fall
+back to the paste method above.
+
+**Without Obtainium**: download the APK from
+[Releases](https://github.com/missing-foss/trobar-android/releases)
+(tags `android-vX.Y.Z`) and install it.
 
 ## Verifying the download
 

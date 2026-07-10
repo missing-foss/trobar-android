@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "soundsync"
+rootProject.name = "trobar-android"
 include(":app")

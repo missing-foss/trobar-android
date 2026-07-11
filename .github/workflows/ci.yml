@@ -1,7 +1,6 @@
-# Android CI — paths assume this directory is the repo root,
-# which it becomes after the public split (android/ -> its own repository).
-# NO release keystore in CI — release builds stay local (see
-# docs/github-org-setup.md section 8). Read-only token, pinned majors.
+# Android CI: the pre-merge verify gate. Runs on every push/PR.
+# NO release keystore in CI — release builds are signed locally and the
+# build.gradle.kts guard pins the canonical key. Read-only token, pinned majors.
 name: ci
 on:
   push:
@@ -22,3 +21,16 @@ jobs:
           java-version: "17"
       - name: Build debug APK
         run: ./gradlew assembleDebug
+      - name: Leak scan (household infra must never ship)
+        run: |
+          if git ls-files | xargs grep -InE "mphp|soundsync|renoir|192\.168\.50|/nfs/" \
+               | grep -viE "\.lock$|workflows/ci\.yml|dev/verify\.sh"; then
+            echo "::error::forbidden term(s) found above"; exit 1
+          fi
+      - name: Secret scan
+        # Binary download rather than gitleaks-action: the org Actions policy
+        # only allows GitHub-owned + verified-creator actions.
+        run: |
+          v=8.24.3
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${v}/gitleaks_${v}_linux_x64.tar.gz" | tar -xz gitleaks
+          ./gitleaks git --no-banner .

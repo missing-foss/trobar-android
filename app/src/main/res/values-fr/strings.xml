@@ -112,7 +112,6 @@
 
     <string name="notification_channel_name">Synchronisation</string>
     <string name="notification_sync_progress">Synchronisation : %1$d / %2$d</string>
-    <string name="transcode_needs_desktop">%1$d morceau(x) à convertir — synchronisez cet appareil avec l\'application de bureau Trobar</string>
 
     <!-- About screen -->
     <string name="section_about">À propos</string>

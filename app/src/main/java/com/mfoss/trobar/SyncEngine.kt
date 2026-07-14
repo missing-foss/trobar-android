@@ -102,15 +102,7 @@ object SyncEngine {
             } catch (e: IOException) { /* best-effort — try again next sync */ }
         }
 
-        // this client can't transcode — a device set to an MP3
-        // format must be synced by the desktop app. Downloading the
-        // original under the .mp3 name the server expects would write FLAC
-        // bytes into an .mp3 file, so flagged tracks are skipped (they stay
-        // pending server-side) with one clear message.
-        val transcodeFlagged = changes.toDownload.count { it.transcode }
-        val downloadable = changes.toDownload.filter { !it.transcode }
-
-        val total = downloadable.size + changes.toDelete.size
+        val total = changes.toDownload.size + changes.toDelete.size
         val done = AtomicInteger(0)
         val downloaded = AtomicInteger(0)
         val deleted = AtomicInteger(0)
@@ -125,16 +117,12 @@ object SyncEngine {
         val dirMutex = Mutex()
         val semaphore = Semaphore(MAX_CONCURRENT_DOWNLOADS)
 
-        if (transcodeFlagged > 0) {
-            firstError.compareAndSet(null, context.getString(R.string.transcode_needs_desktop, transcodeFlagged))
-        }
-
-        val downloadJobs = downloadable.map { track ->
+        val downloadJobs = changes.toDownload.map { track ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
                     try {
-                        downloadOne(context, api, root, track, dirMutex)
-                        api.ack(track.trackId, "downloaded")
+                        val bytesOnDevice = downloadOne(context, api, root, track, dirMutex)
+                        api.ack(track.trackId, "downloaded", bytesOnDevice)
                         downloaded.incrementAndGet()
                     } catch (e: Exception) {
                         failed.incrementAndGet()
@@ -214,20 +202,27 @@ object SyncEngine {
         context.contentResolver.openOutputStream(file.uri)?.use { it.write(bytes) }
     }
 
+    /** Returns the actual number of bytes written, for the caller to ack
+     * back to the server (see ApiClient.ack's bytesOnDevice). */
     private suspend fun downloadOne(
         context: Context,
         api: ApiClient,
         root: DocumentFile,
         track: TrackRef,
         dirMutex: Mutex,
-    ) {
+    ): Long {
         val parts = track.relativePath.split("/")
         val fileName = parts.last()
         val dir = dirMutex.withLock { mkdirs(context, root, parts.dropLast(1)) }
 
         var file = dir.findFile(fileName)
-        if (file != null && file.length() == track.size) {
-            return // already downloaded (e.g. a previous run finished the write but the ack failed)
+        // track.size is always the *original*'s size (see TrackRef/the
+        // server's get_changes) — for a transcode-flagged track the file
+        // that actually lands is the server's MP3, a different size, so
+        // this equality can never confirm a transcoded file is already
+        // complete. Always re-fetch those rather than trust a guess.
+        if (!track.transcode && file != null && file.length() == track.size) {
+            return file.length() // already downloaded (e.g. a previous run finished the write but the ack failed)
         }
         if (file == null) {
             file = dir.createFile(guessMimeType(fileName), fileName)
@@ -240,10 +235,16 @@ object SyncEngine {
         // however many bytes already landed on disk — rather than
         // restarting from zero — avoids re-transferring tens of MB that
         // were already received just because the last few KB didn't land.
+        //
+        // Transcoded tracks can't do this: the server generates the MP3
+        // live and always restarts it from scratch on a fresh request
+        // (ignores Range), so trusting local partial bytes and opening in
+        // append mode would silently glue a full re-encode onto stale
+        // data. Always start those clean instead.
         var lastError: Exception? = null
         for (attempt in 0..DOWNLOAD_RETRIES) {
-            val resumeFrom = file.length()
-            if (resumeFrom >= track.size) break // a previous attempt actually finished
+            val resumeFrom = if (track.transcode) 0L else file.length()
+            if (!track.transcode && resumeFrom >= track.size) break // a previous attempt actually finished
             try {
                 api.downloadFile(track.trackId, resumeFrom).use { resp ->
                     val input = resp.body?.byteStream() ?: throw IOException(context.getString(R.string.empty_response))
@@ -252,7 +253,7 @@ object SyncEngine {
                         input.copyTo(output)
                     } ?: throw IOException(context.getString(R.string.write_stream_unavailable))
                 }
-                return
+                return file.length()
             } catch (e: IOException) {
                 lastError = e
             }

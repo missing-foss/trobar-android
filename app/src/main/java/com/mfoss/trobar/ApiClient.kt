@@ -171,8 +171,14 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
         return resp
     }
 
-    fun ack(trackId: Long, status: String) {
+    /** bytesOnDevice = what actually landed on the device — for a plain
+     * copy that's the original size, for a transcoded track the MP3's
+     * (the server-tracked "size" on a to_download entry is always the
+     * original's, so it can't be reused here). Left null falls back
+     * server-side to tracks.size in the usage math. */
+    fun ack(trackId: Long, status: String, bytesOnDevice: Long? = null) {
         val json = JSONObject().put("track_id", trackId).put("status", status)
+        if (bytesOnDevice != null) json.put("bytes_on_device", bytesOnDevice)
         val body = json.toString().toRequestBody("application/json".toMediaType())
         val req = authed("${baseUrl()}/api/device/ack").post(body).build()
         client.newCall(req).execute().use { resp -> requireSuccess(resp, "ack") }

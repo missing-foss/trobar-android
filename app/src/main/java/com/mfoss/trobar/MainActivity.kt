@@ -100,6 +100,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
+import kotlin.random.Random
 import androidx.documentfile.provider.DocumentFile
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -1345,9 +1346,17 @@ private fun tttWinner(board: List<TttMark>): TttMark? {
     return null
 }
 
-/** Win if it can, block if it must, otherwise centre > corner > edge. No
- * lookahead beyond one ply each way — a player who plays well can beat it,
- * which is the point. */
+/** Never misses an outright win (that would just feel broken) — but
+ * blocking and positioning are deliberately imperfect, a musician playing
+ * by ear rather than a calculator. A strict win/block/centre-corner-edge
+ * heuristic (the first version of this) is *technically* beatable, but
+ * only via a specific forcing sequence (opposite corners, then a fork) a
+ * casual player has no reason to know — in ordinary play it draws or wins
+ * essentially every time, which isn't the "doesn't need to be unbeatable"
+ * the issue asked for. So: only a 70% chance to block a real threat, and
+ * a genuinely random cell (not the strong centre-first preference) when
+ * there's no win or block to make — real, frequent openings to win
+ * without needing to already know the trick. */
 private fun bardMove(board: List<TttMark>): List<TttMark> {
     val empty = board.indices.filter { board[it] == TttMark.NONE }
     fun wouldWin(i: Int, mark: TttMark): Boolean {
@@ -1356,9 +1365,8 @@ private fun bardMove(board: List<TttMark>): List<TttMark> {
         return tttWinner(trial) == mark
     }
     val move = empty.firstOrNull { wouldWin(it, TttMark.BARD) }
-        ?: empty.firstOrNull { wouldWin(it, TttMark.PLAYER) }
-        ?: listOf(4, 0, 2, 6, 8, 1, 3, 5, 7).firstOrNull { it in empty }
-        ?: return board
+        ?: (if (Random.nextInt(10) < 7) empty.firstOrNull { wouldWin(it, TttMark.PLAYER) } else null)
+        ?: empty.random()
     val result = board.toMutableList()
     result[move] = TttMark.BARD
     return result

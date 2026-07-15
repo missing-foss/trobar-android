@@ -136,4 +136,11 @@
     <string name="license_dialog_title">Licence (GPL-3.0-or-later)</string>
     <string name="notices_dialog_title">Mentions des composants tiers</string>
     <string name="close_button">Fermer</string>
+
+    <!-- Easter egg: 5 taps on the About screen's bard -->
+    <string name="tictactoe_title">Défiez le barde</string>
+    <string name="tictactoe_player_win">Vous avez surpassé l\'air du barde !</string>
+    <string name="tictactoe_bard_win">L\'air du barde l\'emporte.</string>
+    <string name="tictactoe_draw">Un duo à égalité — match nul.</string>
+    <string name="tictactoe_play_again">Rejouer</string>
 </resources>

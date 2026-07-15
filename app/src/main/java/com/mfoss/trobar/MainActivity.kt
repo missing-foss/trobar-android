@@ -22,11 +22,13 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,6 +36,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -108,6 +111,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.lifecycleScope
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -1148,6 +1152,12 @@ fun AboutScreen(onBack: () -> Unit) {
     var updateStatus by remember { mutableStateOf<String?>(null) }
     var updateAvailable by remember { mutableStateOf(false) }
     var shownDoc by remember { mutableStateOf<String?>(null) } // asset name, or null
+    // Easter egg: 5 taps on the bard wakes it up for a duel. Resets on its
+    // own after either a trigger or leaving the screen — no need to reset
+    // the counter explicitly on a stray tap since it's just "taps so far",
+    // never decremented.
+    var bardTapCount by remember { mutableStateOf(0) }
+    var showTicTacToe by remember { mutableStateOf(false) }
 
     fun openUrl(url: String) {
         try {
@@ -1214,6 +1224,10 @@ fun AboutScreen(onBack: () -> Unit) {
         )
     }
 
+    if (showTicTacToe) {
+        TicTacToeDialog(onDismiss = { showTicTacToe = false })
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -1235,7 +1249,19 @@ fun AboutScreen(onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            AppLogo(size = 84.dp)
+            AppLogo(
+                size = 84.dp,
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null, // a growing tap streak shouldn't visibly ripple/hint before it's earned
+                ) {
+                    bardTapCount++
+                    if (bardTapCount >= 5) {
+                        bardTapCount = 0
+                        showTicTacToe = true
+                    }
+                },
+            )
             Text(trobarWordmark(), fontFamily = FredokaFamily, fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.headlineSmall)
             Text(
@@ -1293,6 +1319,138 @@ fun AboutScreen(onBack: () -> Unit) {
                             Text(stringResource(R.string.show_notices_button))
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/** Easter egg (5 taps on the bard, About screen). Human plays the note
+ * glyph, the bard answers with the other one — matching the rising-note
+ * motif in AppLogo/RisingNote rather than plain X/O. The bard plays to
+ * win-or-block first, otherwise centre/corner/edge — beatable on purpose
+ * (see the issue: "doesn't need to be unbeatable"), not a minimax grind. */
+private enum class TttMark { NONE, PLAYER, BARD }
+
+private val TTT_LINES = listOf(
+    listOf(0, 1, 2), listOf(3, 4, 5), listOf(6, 7, 8), // rows
+    listOf(0, 3, 6), listOf(1, 4, 7), listOf(2, 5, 8), // columns
+    listOf(0, 4, 8), listOf(2, 4, 6),                  // diagonals
+)
+
+private fun tttWinner(board: List<TttMark>): TttMark? {
+    for ((a, b, c) in TTT_LINES) {
+        if (board[a] != TttMark.NONE && board[a] == board[b] && board[a] == board[c]) return board[a]
+    }
+    return null
+}
+
+/** Win if it can, block if it must, otherwise centre > corner > edge. No
+ * lookahead beyond one ply each way — a player who plays well can beat it,
+ * which is the point. */
+private fun bardMove(board: List<TttMark>): List<TttMark> {
+    val empty = board.indices.filter { board[it] == TttMark.NONE }
+    fun wouldWin(i: Int, mark: TttMark): Boolean {
+        val trial = board.toMutableList()
+        trial[i] = mark
+        return tttWinner(trial) == mark
+    }
+    val move = empty.firstOrNull { wouldWin(it, TttMark.BARD) }
+        ?: empty.firstOrNull { wouldWin(it, TttMark.PLAYER) }
+        ?: listOf(4, 0, 2, 6, 8, 1, 3, 5, 7).firstOrNull { it in empty }
+        ?: return board
+    val result = board.toMutableList()
+    result[move] = TttMark.BARD
+    return result
+}
+
+@Composable
+private fun TicTacToeDialog(onDismiss: () -> Unit) {
+    var board by remember { mutableStateOf(List(9) { TttMark.NONE }) }
+    var result by remember { mutableStateOf<TttMark?>(null) } // null = still playing; NONE = draw
+
+    fun reset() {
+        board = List(9) { TttMark.NONE }
+        result = null
+    }
+
+    fun playerTap(i: Int) {
+        if (result != null || board[i] != TttMark.NONE) return
+        var next = board.toMutableList().also { it[i] = TttMark.PLAYER }
+        val playerWin = tttWinner(next)
+        if (playerWin != null) {
+            board = next; result = playerWin
+            return
+        }
+        if (next.none { it == TttMark.NONE }) {
+            board = next; result = TttMark.NONE
+            return
+        }
+        next = bardMove(next).toMutableList()
+        board = next
+        result = tttWinner(next) ?: if (next.none { it == TttMark.NONE }) TttMark.NONE else null
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    stringResource(R.string.tictactoe_title),
+                    fontFamily = FredokaFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    for (row in 0..2) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            for (col in 0..2) {
+                                val i = row * 3 + col
+                                Surface(
+                                    modifier = Modifier
+                                        .width(64.dp)
+                                        .aspectRatio(1f)
+                                        .clickable { playerTap(i) },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                ) {
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                        Text(
+                                            when (board[i]) {
+                                                TttMark.PLAYER -> "♪" // ♪ — matches RisingNote's glyphs
+                                                TttMark.BARD -> "♫"   // ♫
+                                                TttMark.NONE -> ""
+                                            },
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            color = MaterialTheme.colorScheme.secondary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                result?.let {
+                    Text(
+                        stringResource(
+                            when (it) {
+                                TttMark.PLAYER -> R.string.tictactoe_player_win
+                                TttMark.BARD -> R.string.tictactoe_bard_win
+                                TttMark.NONE -> R.string.tictactoe_draw
+                            }
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.outline,
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (result != null) {
+                        OutlinedButton(onClick = { reset() }) { Text(stringResource(R.string.tictactoe_play_again)) }
+                    }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.close_button)) }
                 }
             }
         }

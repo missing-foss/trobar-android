@@ -136,4 +136,11 @@
     <string name="license_dialog_title">License (GPL-3.0-or-later)</string>
     <string name="notices_dialog_title">Third-party notices</string>
     <string name="close_button">Close</string>
+
+    <!-- Easter egg: 5 taps on the About screen's bard -->
+    <string name="tictactoe_title">Duel the bard</string>
+    <string name="tictactoe_player_win">You\'ve bested the bard\'s tune!</string>
+    <string name="tictactoe_bard_win">The bard\'s melody prevails.</string>
+    <string name="tictactoe_draw">A well-matched duet — call it a draw.</string>
+    <string name="tictactoe_play_again">Play again</string>
 </resources>

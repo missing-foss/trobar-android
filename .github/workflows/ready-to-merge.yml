@@ -5,13 +5,18 @@ on:
     types: [opened, reopened, synchronize, labeled, unlabeled]
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   require-label:
     runs-on: ubuntu-latest
     steps:
       - name: Check for ready-to-merge label
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ', ') }}
         run: |
-          echo "Labels: ${{ join(github.event.pull_request.labels.*.name, ', ') }}"
+          echo "Labels: $LABELS"
           if [ "${{ contains(github.event.pull_request.labels.*.name, 'ready-to-merge') }}" != "true" ]; then
             echo "::error::This PR is missing the 'ready-to-merge' label — it must be reviewed and labeled before merge."
             exit 1

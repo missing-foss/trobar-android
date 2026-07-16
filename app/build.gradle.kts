@@ -4,13 +4,13 @@ import java.security.cert.X509Certificate
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
     id("io.gitlab.arturbosch.detekt")
 }
 
 android {
     namespace = "com.mfoss.trobar"
-    compileSdk = 34
+    compileSdk = 37
 
     defaultConfig {
         // Renamed from the pre-Trobar applicationId — a new id, so
@@ -68,14 +68,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
     buildFeatures {
         compose = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
     }
 }
 

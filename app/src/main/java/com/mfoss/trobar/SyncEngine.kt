@@ -54,7 +54,7 @@ object SyncEngine {
 
         // Enforced on every sync (not just when toggled in Settings) so it
         // stays correct even if the sync folder itself changes later.
-        try { ensureNomediaMarker(root, nomediaEnabled) } catch (e: Exception) { /* best-effort */ }
+        try { ensureNomediaMarker(root, nomediaEnabled) } catch (ignored: Exception) { /* best-effort */ }
 
         var changes = try {
             api.getChanges()
@@ -99,7 +99,7 @@ object SyncEngine {
                     }
                     else -> reportedMissing.addAll(missingTracks) // "ask" — surfaced via SyncResult, not acted on here
                 }
-            } catch (e: IOException) { /* best-effort — try again next sync */ }
+            } catch (ignored: IOException) { /* best-effort — try again next sync */ }
         }
 
         val total = changes.toDownload.size + changes.toDelete.size
@@ -163,13 +163,13 @@ object SyncEngine {
         // failed picture is never treated as a sync failure. the
         // setting is device-level now (web UI, /api/device/info) — off /
         // small (~512px, server-side downscale) / full.
-        val artistImages = try { api.getDeviceInfo().artistImages } catch (e: Exception) { null }
+        val artistImages = try { api.getDeviceInfo().artistImages } catch (ignored: Exception) { null }
         if (artistImages == "small" || artistImages == "full") {
             for (dir in root.listFiles()) {
                 if (!dir.isDirectory) continue
                 try {
                     downloadArtistImageIfMissing(context, api, dir, small = artistImages == "small")
-                } catch (e: Exception) { /* decorative only — ignore */ }
+                } catch (ignored: Exception) { /* decorative only — ignore */ }
             }
         }
 
@@ -242,7 +242,7 @@ object SyncEngine {
         // append mode would silently glue a full re-encode onto stale
         // data. Always start those clean instead.
         var lastError: Exception? = null
-        for (attempt in 0..DOWNLOAD_RETRIES) {
+        for (@Suppress("unused") attempt in 0..DOWNLOAD_RETRIES) {
             val resumeFrom = if (track.transcode) 0L else file.length()
             if (!track.transcode && resumeFrom >= track.size) break // a previous attempt actually finished
             try {
@@ -297,7 +297,7 @@ object SyncEngine {
             val n = s.read(buf)
             if (n <= 0) "" else String(buf, 0, n, Charsets.UTF_8)
         }
-    } catch (e: Exception) { null }
+    } catch (ignored: Exception) { null }
 
     private fun writePlaylists(context: Context, root: DocumentFile, playlists: List<PlaylistRef>) {
         val expected = playlists.map { it.filename }.toSet()
@@ -307,7 +307,7 @@ object SyncEngine {
             if (existing != null) {
                 val current = try {
                     context.contentResolver.openInputStream(existing.uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
-                } catch (e: Exception) { null }
+                } catch (ignored: Exception) { null }
                 if (current == pl.content) continue
                 existing.delete()
             }

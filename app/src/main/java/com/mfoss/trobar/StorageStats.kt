@@ -26,7 +26,7 @@ data class StorageStats(val freeBytes: Long, val totalBytes: Long)
 fun storageStatsForTree(context: Context, treeUri: Uri): StorageStats? {
     val rootId = try {
         DocumentsContract.getTreeDocumentId(treeUri).substringBefore(":")
-    } catch (e: Exception) {
+    } catch (ignored: Exception) {
         return null
     }
 
@@ -45,7 +45,7 @@ fun storageStatsForTree(context: Context, treeUri: Uri): StorageStats? {
             return try {
                 val stat = StatFs(path)
                 StorageStats(stat.availableBytes, stat.totalBytes)
-            } catch (e: Exception) {
+            } catch (ignored: Exception) {
                 null
             }
         }
@@ -79,7 +79,7 @@ private fun storageStatsFromRootsQuery(context: Context, treeUri: Uri): StorageS
             }
             null
         }
-    } catch (e: Exception) {
+    } catch (ignored: Exception) {
         null
     }
 }

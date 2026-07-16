@@ -1,0 +1,98 @@
+# Overrides on top of detekt's own recommended default rule set
+# (buildUponDefaultConfig = true in app/build.gradle.kts). Every override
+# below reflects a reviewed judgment call, not a blanket suppression —
+# same shape as the server's pyproject.toml mypy overrides.
+
+naming:
+  FunctionNaming:
+    # Jetpack Compose's own convention capitalizes @Composable functions like
+    # classes (TileRow, StatusScreen, ...) — this detekt version has no
+    # Compose-aware ignoreAnnotated option for this rule, so widen the
+    # pattern to accept both cases rather than fighting an official
+    # first-party naming convention.
+    functionPattern: '[a-zA-Z][a-zA-Z0-9]*'
+
+style:
+  MagicNumber:
+    # This codebase is dominated by two kinds of numeric literal that aren't
+    # "magic" in the sense this rule targets: Material color hex constants
+    # (Theme.kt's LightColors/DarkColors) and Compose animation/layout math
+    # (offsets, alphas, durations in AppLogo/RisingNote and friends) — in both
+    # cases the literal is inherent to the declarative value being built, and
+    # the containing declaration (a property or a local val) already carries
+    # the descriptive name. Real business-logic magic numbers (crypto key
+    # size, timeouts, sync interval) were named as constants instead of
+    # suppressed — see TokenCrypto.kt, ApiClient.kt, SyncWorker.kt.
+    ignorePropertyDeclaration: true
+    ignoreLocalVariableDeclaration: true
+  MaxLineLength:
+    # This codebase's existing lines run up to ~142 chars; 120 is IntelliJ's
+    # default margin, not a convention this project has ever followed.
+    maxLineLength: 150
+  ReturnCount:
+    # Default max is 2. Guard-clause-style early returns (StorageStats.kt's
+    # storageStatsForTree/storageStatsFromRootsQuery) are idiomatic,
+    # readable Kotlin, not a sign of tangled control flow.
+    max: 5
+  ThrowsCount:
+    # Default max is 2. SyncEngine.kt's downloadOne throws for 4 distinct,
+    # meaningful failure modes (parent dir creation, empty response,
+    # unwritable output, exhausted retries) — each is its own clear
+    # failure, not sprawl.
+    max: 4
+  LoopWithTooManyJumpStatements:
+    # Default max is 1. writePlaylists' cleanup loop has two early
+    # `continue`s (skip no-name entries, skip non-matching files) — a
+    # standard, readable guard-clause loop, not a jump-statement pileup.
+    maxJumpCount: 2
+
+complexity:
+  # This is a single-Activity Compose app: MainActivity.kt holds every
+  # screen as its own top-level @Composable function. A screen function is
+  # long/branchy because it lays out UI + wires callbacks, not because its
+  # control flow is genuinely tangled — excluding it from the two
+  # size/branch-count metrics that don't distinguish "declarative UI" from
+  # "imperative logic sprawl". SyncEngine.kt/ApiClient.kt/etc. (real business
+  # logic) stay fully covered by these rules, at a threshold bumped just
+  # enough for today's sync engine (network + retry + SAF orchestration is
+  # inherently branchy) — new code that's more complex than that still
+  # fails the build. Not a substitute for the real refactor these two big
+  # screens (SettingsScreen, StatusScreen) would benefit from eventually.
+  LongMethod:
+    threshold: 85
+    excludes: ['**/MainActivity.kt']
+  CyclomaticComplexMethod:
+    threshold: 30
+    excludes: ['**/MainActivity.kt']
+  NestedBlockDepth:
+    # downloadOne/writePlaylists/storageStatsFromRootsQuery's IO-retry and
+    # SAF-traversal nesting; default 4 is tuned for flatter business logic.
+    threshold: 6
+  TooManyFunctions:
+    # Prefs (21, a single flat preferences facade), ApiClient (15, one
+    # method per device-API endpoint), and MainActivity.kt as a file (24
+    # composable screens/rows) are each a single well-scoped concern with
+    # many small, similar members — not a God-object smell. Default 11 is
+    # tuned for more general-purpose classes.
+    thresholdInFiles: 25
+    thresholdInClasses: 25
+    thresholdInObjects: 25
+  LongParameterList:
+    # Composable screen/row functions (ChoiceRow, SettingsScreen) take one
+    # parameter per distinct piece of state or callback they expose — a
+    # standard Compose shape, not parameter-list sprawl to trim.
+    functionThreshold: 8
+
+exceptions:
+  # Reviewed every flagged catch site by hand (see PR description): all are
+  # deliberate best-effort/decorative catches already documented with an
+  # inline comment (permission cleanup, non-JSON QR payload, missing
+  # browser, etc.), or deliberately unify heterogeneous SAF/IO/JSON/network
+  # failure types into one user-facing error message. Catching broadly is
+  # the correct choice in both cases, not an oversight.
+  TooGenericExceptionCaught:
+    active: false
+  # SwallowedException stays active: every genuinely-unused caught
+  # exception was renamed to `ignored` (matches this rule's own
+  # allowedExceptionNameRegex), which both documents intent and keeps the
+  # rule live for any future catch that swallows one by accident.

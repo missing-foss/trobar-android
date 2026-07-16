@@ -71,7 +71,7 @@ object Prefs {
                     prefs[TOKEN] = TokenCrypto.encrypt(stored)
                 }
             }
-        } catch (e: Exception) {
+        } catch (ignored: Exception) {
             // leave as-is
         }
     }

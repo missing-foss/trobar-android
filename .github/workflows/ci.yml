@@ -21,6 +21,8 @@ jobs:
           java-version: "17"
       - name: Build debug APK
         run: ./gradlew assembleDebug
+      - name: Static analysis (detekt)
+        run: ./gradlew detekt
       - name: Leak scan (household infra must never ship)
         run: |
           if git ls-files | xargs grep -InE "mphp|soundsync|renoir|192\.168\.50|/nfs/" \

@@ -84,7 +84,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         )
 
         storageStatsForTree(applicationContext, Uri.parse(treeUri))?.let { stats ->
-            try { api.reportStorage(stats.freeBytes, stats.totalBytes) } catch (e: Exception) { /* best-effort, not fatal */ }
+            try { api.reportStorage(stats.freeBytes, stats.totalBytes) } catch (ignored: Exception) { /* best-effort, not fatal */ }
         }
 
         val currentLocale = AppCompatDelegate.getApplicationLocales().get(0) ?: Locale.getDefault()
@@ -105,6 +105,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
 
     companion object {
         private const val PERIODIC_WORK_NAME = "trobar-periodic"
+        private const val PERIODIC_INTERVAL_HOURS = 6L
         const val MANUAL_WORK_NAME = "trobar-manual"
         const val KEY_IS_MANUAL = "is_manual"
         const val KEY_DONE = "done"
@@ -167,7 +168,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(networkTypeFor(mode))
                 .build()
-            val request = PeriodicWorkRequestBuilder<SyncWorker>(6, TimeUnit.HOURS)
+            val request = PeriodicWorkRequestBuilder<SyncWorker>(PERIODIC_INTERVAL_HOURS, TimeUnit.HOURS)
                 .setConstraints(constraints)
                 .build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(

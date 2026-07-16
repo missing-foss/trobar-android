@@ -5,6 +5,7 @@ import java.security.cert.X509Certificate
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("io.gitlab.arturbosch.detekt")
 }
 
 android {
@@ -76,6 +77,13 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
     }
+}
+
+detekt {
+    // Repo-relative override on top of detekt's own recommended defaults —
+    // same shape as the server's pyproject.toml scoped ignores for mypy.
+    buildUponDefaultConfig = true
+    config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
 }
 
 dependencies {

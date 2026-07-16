@@ -29,6 +29,7 @@ object TokenCrypto {
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
     private const val IV_LEN = 12
     private const val TAG_BITS = 128
+    private const val KEY_SIZE_BITS = 256
 
     /** Marks a value produced by [encrypt]; lets us tell it apart from a
      * legacy plaintext token written by an older version (base64url tokens never
@@ -46,7 +47,7 @@ object TokenCrypto {
             )
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setKeySize(256)
+                .setKeySize(KEY_SIZE_BITS)
                 .build()
         )
         return generator.generateKey()
@@ -74,7 +75,7 @@ object TokenCrypto {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(TAG_BITS, iv))
         String(cipher.doFinal(ct), Charsets.UTF_8)
-    } catch (e: Exception) {
+    } catch (ignored: Exception) {
         null
     }
 

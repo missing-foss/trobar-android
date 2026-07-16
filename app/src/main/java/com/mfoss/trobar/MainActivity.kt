@@ -175,7 +175,7 @@ class MainActivity : ComponentActivity() {
                             Uri.parse(treeUri),
                             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
                         )
-                    } catch (e: Exception) { /* already gone — fine */ }
+                    } catch (ignored: Exception) { /* already gone — fine */ }
                     contentResolver.takePersistableUriPermission(
                         newUri,
                         Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
@@ -251,10 +251,9 @@ private fun RisingNote(t: Float, phase: Float, drift: Float, glyph: String, mark
         fontSize = (markSize.value * 0.26f).sp,
         modifier = Modifier
             .offset {
-                IntOffset(
-                    (markSize.toPx() * (0.63f + drift * p)).roundToInt(),
-                    (markSize.toPx() * (0.64f - 0.58f * p)).roundToInt(),
-                )
+                val x = markSize.toPx() * (0.63f + drift * p)
+                val y = markSize.toPx() * (0.64f - 0.58f * p)
+                IntOffset(x.roundToInt(), y.roundToInt())
             }
             .graphicsLayer { alpha = noteAlpha; scaleX = noteScale; scaleY = noteScale },
     )
@@ -274,7 +273,7 @@ fun trobarWordmark(): AnnotatedString = buildAnnotatedString {
  * folder is selected. */
 fun humanReadablePath(context: Context, uri: Uri): String = try {
     DocumentsContract.getTreeDocumentId(uri).replace("primary:", context.getString(R.string.internal_storage_prefix))
-} catch (e: Exception) {
+} catch (ignored: Exception) {
     uri.toString()
 }
 
@@ -288,7 +287,7 @@ fun PairingScreen(onPaired: (String, String) -> Unit) {
         try {
             val json = JSONObject(raw)
             onPaired(json.getString("server_url"), json.getString("token"))
-        } catch (e: Exception) {
+        } catch (ignored: Exception) {
             // Not JSON — ignore, user can still fill the fields manually below.
         }
     }
@@ -424,7 +423,7 @@ private fun parsePendingMissing(json: String?): List<MissingTrackInfo> {
             val o = arr.getJSONObject(it)
             MissingTrackInfo(o.getLong("track_id"), o.getString("relative_path"))
         }
-    } catch (e: Exception) {
+    } catch (ignored: Exception) {
         emptyList()
     }
 }
@@ -476,7 +475,7 @@ fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit) {
     LaunchedEffect(pairing) {
         deviceName = try {
             withContext(Dispatchers.IO) { ApiClient(context, pairing.serverUrl, pairing.token).getDeviceInfo().name }
-        } catch (e: Exception) { null }
+        } catch (ignored: Exception) { null }
     }
 
     Scaffold(
@@ -632,7 +631,11 @@ fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit) {
     }
 }
 
-private fun formatGB(bytes: Long?): String = if (bytes == null) "?" else "%.1f".format(bytes / 1e9)
+private const val BYTES_PER_GB = 1e9
+private const val EASTER_EGG_TAP_THRESHOLD = 5
+private const val TTT_BOARD_SIZE = 9
+
+private fun formatGB(bytes: Long?): String = if (bytes == null) "?" else "%.1f".format(bytes / BYTES_PER_GB)
 
 /** Mirrors the web UI's deviceIconSvg() mapping — phone,
  * tablet, watch, dap (dedicated audio player), sdcard (bare card). 'android'
@@ -849,9 +852,9 @@ fun SettingsScreen(
     LaunchedEffect(pairing, treeUri) {
         val info = try {
             withContext(Dispatchers.IO) { ApiClient(context, pairing.serverUrl, pairing.token).getDeviceInfo() }
-        } catch (e: Exception) { null }
+        } catch (ignored: Exception) { null }
         deviceInfo = info
-        limitField = info?.maxSizeBytes?.let { "%.1f".format(it / 1e9) } ?: ""
+        limitField = info?.maxSizeBytes?.let { "%.1f".format(it / BYTES_PER_GB) } ?: ""
         storageStats = withContext(Dispatchers.IO) { storageStatsForTree(context, Uri.parse(treeUri)) }
     }
 
@@ -913,7 +916,7 @@ fun SettingsScreen(
         EditValueDialog(
             title = stringResource(R.string.allocated_space_label),
             label = stringResource(R.string.limit_gb_field_label),
-            initial = deviceInfo?.maxSizeBytes?.let { "%.1f".format(it / 1e9) } ?: "",
+            initial = deviceInfo?.maxSizeBytes?.let { "%.1f".format(it / BYTES_PER_GB) } ?: "",
             onDismiss = { showLimitDialog = false },
             onConfirm = { v -> limitField = v; saveLimit(); showLimitDialog = false },
         )
@@ -985,7 +988,9 @@ fun SettingsScreen(
                 TileRow(
                     icon = Icons.Filled.Storage,
                     label = stringResource(R.string.allocated_space_label),
-                    value = deviceInfo?.maxSizeBytes?.let { stringResource(R.string.storage_gb_value, it / 1e9) } ?: stringResource(R.string.unlimited),
+                    value = deviceInfo?.maxSizeBytes
+                        ?.let { stringResource(R.string.storage_gb_value, it / BYTES_PER_GB) }
+                        ?: stringResource(R.string.unlimited),
                     onClick = { showLimitDialog = true },
                 )
                 storageStats?.let { stats ->
@@ -1137,12 +1142,12 @@ fun SettingsScreen(
 private fun appVersionName(context: android.content.Context): String =
     try {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "?"
-    } catch (e: Exception) { "?" }
+    } catch (ignored: Exception) { "?" }
 
 private fun readAsset(context: android.content.Context, name: String): String =
     try {
         context.assets.open(name).bufferedReader().use { it.readText() }
-    } catch (e: Exception) { "" }
+    } catch (ignored: Exception) { "" }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1163,7 +1168,7 @@ fun AboutScreen(onBack: () -> Unit) {
     fun openUrl(url: String) {
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        } catch (e: Exception) { /* no browser — nothing sensible to do */ }
+        } catch (ignored: Exception) { /* no browser — nothing sensible to do */ }
     }
 
     // User-initiated only: one GitHub API call per button press,
@@ -1179,7 +1184,7 @@ fun AboutScreen(onBack: () -> Unit) {
                         .url("https://api.github.com/repos/missing-foss/trobar-android/releases/latest")
                         .build()
                     OkHttpClient().newCall(req).execute().use { resp ->
-                        if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
+                        if (!resp.isSuccessful) throw java.io.IOException("HTTP ${resp.code}")
                         org.json.JSONObject(resp.body!!.string()).optString("tag_name")
                     }
                 }
@@ -1257,7 +1262,7 @@ fun AboutScreen(onBack: () -> Unit) {
                     indication = null, // a growing tap streak shouldn't visibly ripple/hint before it's earned
                 ) {
                     bardTapCount++
-                    if (bardTapCount >= 5) {
+                    if (bardTapCount >= EASTER_EGG_TAP_THRESHOLD) {
                         bardTapCount = 0
                         showTicTacToe = true
                     }
@@ -1277,10 +1282,12 @@ fun AboutScreen(onBack: () -> Unit) {
                 }
                 // Liberapay's brand yellow — a vendored "button", no external
                 // widget script (a deliberate no-CDN choice).
+                val liberapayYellow = Color(0xFFF6C915)
+                val liberapayInk = Color(0xFF1A171B)
                 Button(
                     onClick = { openUrl("https://liberapay.com/Trobar/donate") },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFF6C915), contentColor = Color(0xFF1A171B)),
+                        containerColor = liberapayYellow, contentColor = liberapayInk),
                 ) {
                     Text(stringResource(R.string.donate_button))
                 }
@@ -1374,11 +1381,11 @@ private fun bardMove(board: List<TttMark>): List<TttMark> {
 
 @Composable
 private fun TicTacToeDialog(onDismiss: () -> Unit) {
-    var board by remember { mutableStateOf(List(9) { TttMark.NONE }) }
+    var board by remember { mutableStateOf(List(TTT_BOARD_SIZE) { TttMark.NONE }) }
     var result by remember { mutableStateOf<TttMark?>(null) } // null = still playing; NONE = draw
 
     fun reset() {
-        board = List(9) { TttMark.NONE }
+        board = List(TTT_BOARD_SIZE) { TttMark.NONE }
         result = null
     }
 

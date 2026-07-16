@@ -30,8 +30,8 @@ data class DeviceInfo(val name: String, val maxSizeBytes: Long?, val deviceType:
 class ApiClient(context: Context, private val serverUrl: String, private val token: String) {
     private val appContext = context.applicationContext
     private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .build()
 
     private fun baseUrl() = serverUrl.trimEnd('/')
@@ -58,7 +58,7 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
     private fun errorMessage(resp: Response, default: String): String {
         val parsed = try {
             resp.body?.string()?.let { JSONObject(it).optString("error") }
-        } catch (e: Exception) { null }
+        } catch (ignored: Exception) { null }
         return parsed?.takeIf { it.isNotBlank() } ?: default
     }
 
@@ -195,5 +195,10 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
             if (!resp.isSuccessful) return null
             return resp.body?.bytes()
         }
+    }
+
+    private companion object {
+        const val CONNECT_TIMEOUT_SECONDS = 15L
+        const val READ_TIMEOUT_SECONDS = 60L
     }
 }

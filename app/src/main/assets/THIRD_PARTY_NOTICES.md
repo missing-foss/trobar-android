@@ -6,8 +6,8 @@ dependencies, and the server's Python runtime dependencies. Each is provided
 under its own license, reproduced here. Trobar's own code is under the license in
 the repository's `LICENSE` file; nothing below changes that.
 
-The full text of each distinct license (SIL OFL 1.1, MIT, Apache License 2.0, and
-the JSON License) appears once, at the end, after the component inventory.
+The full text of each distinct license (SIL OFL 1.1, MIT, and Apache License 2.0)
+appears once, at the end, after the component inventory.
 
 ---
 
@@ -48,8 +48,10 @@ below.
 
 ## 3. Android app — compiled dependencies
 
-The released APK statically links the libraries below. Most are under the Apache
-License 2.0; `org.json` is under the JSON License.
+The released APK statically links the libraries below, all under the Apache
+License 2.0. (`org.json` is intentionally not bundled — its `JSONObject`/`JSONArray`
+classes resolve against the Android platform instead of the GPL-incompatible
+JSON-licensed artifact; see `app/build.gradle.kts` and #28.)
 
 ### Apache License 2.0
 
@@ -67,14 +69,6 @@ License 2.0; `org.json` is under the JSON License.
   — Copyright (C) JetBrains s.r.o.
 
 See [Apache License 2.0](#apache-license-version-20) below.
-
-### JSON License
-
-- **JSON-java** 20240303 (`org.json:json`) — Copyright (c) 2002 JSON.org
-
-See [The JSON License](#the-json-license) below. Note: the JSON License adds the
-clause *"The Software shall be used for Good, not Evil."* to otherwise MIT-like
-terms; it is retained here verbatim as required.
 
 ---
 
@@ -209,32 +203,6 @@ furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-## The JSON License
-
-```
-Copyright (c) 2002 JSON.org
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-The Software shall be used for Good, not Evil.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,

@@ -94,7 +94,11 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("com.squareup.okhttp3:okhttp:5.4.0")
-    implementation("org.json:json:20240303")
+    // org.json is part of the Android platform (bootclasspath, since API 1), so
+    // JSONObject/JSONArray resolve without an explicit dependency. We deliberately
+    // do NOT declare org.json:json — that artifact is under the GPL-incompatible
+    // "JSON License" ("...used for Good, not Evil"), and as an `implementation`
+    // dep it would be packaged into this GPL-3.0 APK. See #28.
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("androidx.documentfile:documentfile:1.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")

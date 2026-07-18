@@ -56,16 +56,16 @@ JSON-licensed artifact; see `app/build.gradle.kts` and #28.)
 ### Apache License 2.0
 
 - **AndroidX** (`androidx.appcompat`, `androidx.core:core-ktx`,
-  `androidx.activity:activity-compose`, `androidx.compose.*` [BOM 2024.06.00:
+  `androidx.activity:activity-compose`, `androidx.compose.*` [BOM 2026.06.01:
   ui, material3, material-icons-core, material-icons-extended, ui-tooling-preview],
   `androidx.lifecycle:lifecycle-runtime-ktx`, `androidx.work:work-runtime-ktx`,
   `androidx.datastore:datastore-preferences`, `androidx.documentfile`) —
   Copyright (C) The Android Open Source Project
-- **OkHttp** 4.12.0 (`com.squareup.okhttp3:okhttp`) — Copyright (C) Square, Inc.
+- **OkHttp** 5.4.0 (`com.squareup.okhttp3:okhttp`) — Copyright (C) Square, Inc.
 - **ZXing Android Embedded** 4.3.0 (`com.journeyapps:zxing-android-embedded`) —
   Copyright (C) Journey Mobile, Inc.; incorporates ZXing —
   Copyright (C) The ZXing Authors
-- **kotlinx.coroutines** 1.8.1 (`org.jetbrains.kotlinx:kotlinx-coroutines-android`)
+- **kotlinx.coroutines** 1.11.0 (`org.jetbrains.kotlinx:kotlinx-coroutines-android`)
   — Copyright (C) JetBrains s.r.o.
 
 See [Apache License 2.0](#apache-license-version-20) below.

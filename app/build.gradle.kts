@@ -97,5 +97,5 @@ dependencies {
     implementation("org.json:json:20240303")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("androidx.documentfile:documentfile:1.1.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 }

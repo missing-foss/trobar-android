@@ -115,6 +115,11 @@
     <string name="dynamic_color_description">Thème basé sur le fond d\'écran</string>
     <string name="language_label">Langue</string>
     <string name="language_system">Système</string>
+    <string name="orientation_label">Orientation de l\'écran</string>
+    <string name="orientation_auto">Auto (suivre le système)</string>
+    <string name="orientation_portrait">Portrait</string>
+    <string name="orientation_landscape">Paysage</string>
+    <string name="orientation_help">Verrouille l\'application en portrait ou paysage, même quand le système pivote automatiquement. Sur les grands écrans (tablettes, pliables dépliés), Android peut ignorer ce verrou et pivoter quand même.</string>
 
     <string name="unpair_device_button">Dissocier cet appareil</string>
 

@@ -460,8 +460,9 @@ fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit, onReEnroll:
             )
         },
     ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.TopCenter) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 24.dp, vertical = 24.dp),
+            modifier = Modifier.then(adaptiveContentWidth()).fillMaxHeight().padding(horizontal = 24.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // Hero area — logo + app name + device name
@@ -471,7 +472,7 @@ fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit, onReEnroll:
                 verticalArrangement = Arrangement.Center,
             ) {
                 AppLogo(
-                    size = 160.dp,
+                    size = if (isCompactHeight()) 96.dp else 160.dp,
                     modifier = Modifier.clickable(enabled = !syncing) { scope.launch { SyncWorker.triggerManualSync(context) } },
                     syncing = syncing,
                 )
@@ -596,6 +597,7 @@ fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit, onReEnroll:
                     }
                 }
             }
+        }
         }
     }
 }
@@ -1259,10 +1261,11 @@ fun AboutScreen(onBack: () -> Unit) {
             )
         },
     ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.TopCenter) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
+                .then(adaptiveContentWidth())
+                .fillMaxHeight()
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -1342,6 +1345,7 @@ fun AboutScreen(onBack: () -> Unit) {
                     }
                 }
             }
+        }
         }
     }
 }

@@ -28,6 +28,9 @@ data class PlaylistRef(val name: String, val filename: String, val content: Stri
 class UnauthorizedException(message: String) : IOException(message)
 data class DeviceInfo(val name: String, val maxSizeBytes: Long?, val deviceType: String,
                       val artistImages: String? = null, val sourceOfTruth: String = "server")
+/** #34 recovery: how many uploaded device paths the server matched against its
+ * library (marked downloaded) vs didn't recognize. */
+data class ManifestResult(val matched: Int, val unmatched: Int)
 
 /** Talks to the device-facing API ("/api/device" routes) — Bearer-token
  * auth, no ForwardAuth involved (that router is deliberately excluded from
@@ -96,6 +99,23 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
         val body = json.toString().toRequestBody("application/json".toMediaType())
         val req = authed("${baseUrl()}/api/device/source-of-truth").method("PATCH", body).build()
         client.newCall(req).execute().use { resp -> requireSuccess(resp, "source-of-truth") }
+    }
+
+    /** #34 recovery: tell a freshly re-enrolled device's server which tracks
+     * this device already holds — the server-relative device paths from
+     * getChanges' wire form (Artiste/Album/NN - Titre.ext) — so they're marked
+     * 'downloaded' instead of re-fetched. Must be paired with
+     * setSourceOfTruth("device") set FIRST (or the next server recompute prunes
+     * the tracks it just marked) — see SyncEngine's recovery step. */
+    fun postManifest(paths: List<String>): ManifestResult {
+        val json = JSONObject().put("paths", JSONArray(paths))
+        val body = json.toString().toRequestBody("application/json".toMediaType())
+        val req = authed("${baseUrl()}/api/device/manifest").post(body).build()
+        client.newCall(req).execute().use { resp ->
+            requireSuccess(resp, "manifest")
+            val obj = JSONObject(resp.body?.string() ?: "{}")
+            return ManifestResult(obj.optInt("matched"), obj.optInt("unmatched"))
+        }
     }
 
     /** Reports this device's actual free + total space (see

@@ -149,7 +149,12 @@ class MainActivity : ComponentActivity() {
             showAbout -> AboutScreen(onBack = { showAbout = false })
             pairing === NOT_LOADED -> Unit // still loading prefs, render nothing yet
             pairing == null -> EnrollmentWizard(onEnrolled = { url, token ->
-                lifecycleScope.launch { Prefs.setPairing(this@MainActivity, url, token) }
+                lifecycleScope.launch {
+                    Prefs.setPairing(this@MainActivity, url, token)
+                    // #34: the first sync checks the (soon-to-be-picked) folder
+                    // for an existing library and runs recovery if found.
+                    Prefs.setRecoveryPending(this@MainActivity, true)
+                }
             })
             treeUri == null -> FolderPickerScreen(onPicked = { uri ->
                 contentResolver.takePersistableUriPermission(

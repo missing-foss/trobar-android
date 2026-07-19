@@ -17,6 +17,7 @@ object Prefs {
     private val SERVER_URL = stringPreferencesKey("server_url")
     private val TOKEN = stringPreferencesKey("token")
     private val TREE_URI = stringPreferencesKey("tree_uri")
+    private val RECOVERY_PENDING = booleanPreferencesKey("recovery_pending")
     private val LAST_SYNC_AT = stringPreferencesKey("last_sync_at")
     private val LAST_SYNC_ERROR = stringPreferencesKey("last_sync_error")
     private val NETWORK_MODE = stringPreferencesKey("network_mode")
@@ -94,6 +95,17 @@ object Prefs {
 
     suspend fun setTreeUri(context: Context, uri: String) {
         context.dataStore.edit { it[TREE_URI] = uri }
+    }
+
+    /** #34: set when a device (re-)enrolls; the next sync checks whether the
+     * chosen folder already holds a library and, if so, runs the recovery
+     * handshake (source_of_truth=device + manifest) before its first pull, so a
+     * reinstalled/migrated device is neither wiped nor made to re-download. */
+    fun recoveryPending(context: Context): Flow<Boolean> =
+        context.dataStore.data.map { it[RECOVERY_PENDING] ?: false }
+
+    suspend fun setRecoveryPending(context: Context, pending: Boolean) {
+        context.dataStore.edit { it[RECOVERY_PENDING] = pending }
     }
 
     fun lastSyncAt(context: Context): Flow<String?> =

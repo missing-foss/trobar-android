@@ -40,12 +40,17 @@ object SyncEngine {
     private const val MAX_CONCURRENT_DOWNLOADS = 3
     private const val DOWNLOAD_RETRIES = 2
 
+    // Only these (audio) files map to library tracks the manifest can match —
+    // playlists (.m3u8), artist/cover art (.jpg) and .nomedia are skipped.
+    private val AUDIO_EXTENSIONS = setOf("flac", "mp3", "m4a", "ogg", "opus", "wav", "aac", "alac")
+
     suspend fun run(
         context: Context,
         api: ApiClient,
         treeUriString: String,
         nomediaEnabled: Boolean = false,
         missingFileBehavior: String = Prefs.MISSING_ASK,
+        recoveryPending: Boolean = false,
         onProgress: (SyncProgress) -> Unit = {},
     ): SyncResult = coroutineScope {
         val treeUri = Uri.parse(treeUriString)
@@ -55,6 +60,13 @@ object SyncEngine {
         // Enforced on every sync (not just when toggled in Settings) so it
         // stays correct even if the sync folder itself changes later.
         try { ensureNomediaMarker(root, nomediaEnabled) } catch (ignored: Exception) { /* best-effort */ }
+
+        // #34 recovery: runs (and clears its flag) before the first pull; a
+        // non-null return means it couldn't finish (network) — abort this sync
+        // and retry, rather than proceeding into a prune/re-download.
+        recoverIfPending(context, api, root, recoveryPending)?.let {
+            return@coroutineScope SyncResult(0, 0, 0, it)
+        }
 
         var changes = try {
             api.getChanges()
@@ -184,6 +196,53 @@ object SyncEngine {
      * Public (not private) so SettingsScreen can call it directly for
      * instant feedback when the toggle changes, instead of waiting for the
      * next sync to pick it up. */
+    /** #34 recovery: on the first sync after a (re-)enrollment, if the chosen
+     * folder already holds a library, tell the server we have it BEFORE the
+     * first pull — source_of_truth='device' (so it won't prune what we hold),
+     * then the manifest (so it marks those tracks downloaded instead of
+     * re-queuing them). Both are idempotent; the flag is cleared only once the
+     * handshake completes, so a network failure mid-recovery retries next sync.
+     * Returns an error message if it couldn't complete, else null. */
+    private suspend fun recoverIfPending(
+        context: Context, api: ApiClient, root: DocumentFile, recoveryPending: Boolean,
+    ): String? {
+        if (!recoveryPending) return null
+        val held = collectHeldPaths(root)
+        if (held.isNotEmpty()) {
+            try {
+                api.setSourceOfTruth("device")
+                api.postManifest(held)
+            } catch (e: IOException) {
+                return context.getString(R.string.cannot_reach_server, e.message)
+            }
+        }
+        Prefs.setRecoveryPending(context, false)
+        return null
+    }
+
+    /** #34 recovery: the server-relative device paths of every audio file
+     * currently in the sync folder — a full SAF tree walk (used only at
+     * recovery, a rare one-shot). These are exactly the wire paths getChanges
+     * emits (Artiste/Album/NN - Titre.ext), so the server's manifest matcher
+     * recognizes them. Non-track files (playlists, artwork, .nomedia) are
+     * skipped so `unmatched` reflects real unknown tracks. */
+    private fun collectHeldPaths(root: DocumentFile): List<String> {
+        val out = mutableListOf<String>()
+        fun walk(dir: DocumentFile, prefix: String) {
+            for (child in dir.listFiles()) {
+                val name = child.name ?: continue
+                val path = if (prefix.isEmpty()) name else "$prefix/$name"
+                if (child.isDirectory) {
+                    walk(child, path)
+                } else if (name.substringAfterLast('.', "").lowercase() in AUDIO_EXTENSIONS) {
+                    out.add(path)
+                }
+            }
+        }
+        walk(root, "")
+        return out
+    }
+
     fun ensureNomediaMarker(root: DocumentFile, shouldExist: Boolean) {
         val existing = root.findFile(".nomedia")
         if (shouldExist && existing == null) {

@@ -21,7 +21,7 @@ data class Changes(val toDownload: List<TrackRef>, val toDelete: List<TrackDelet
 /** a server-generated.m3u8 for one playlist assigned to this device. */
 data class PlaylistRef(val name: String, val filename: String, val content: String)
 data class DeviceInfo(val name: String, val maxSizeBytes: Long?, val deviceType: String,
-                      val artistImages: String? = null)
+                      val artistImages: String? = null, val sourceOfTruth: String = "server")
 
 /** Talks to the device-facing API ("/api/device" routes) — Bearer-token
  * auth, no ForwardAuth involved (that router is deliberately excluded from
@@ -77,8 +77,17 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
             val max = if (json.isNull("max_size_bytes")) null else json.optLong("max_size_bytes")
             val artistImages = if (json.isNull("artist_images")) null else json.optString("artist_images")
             return DeviceInfo(json.optString("name", "?"), max, json.optString("device_type", "phone"),
-                              artistImages)
+                              artistImages, json.optString("source_of_truth", "server"))
         }
+    }
+
+    /** #63: 'device' stops the server pruning this device's tracks (survives a
+     * server DB loss); 'server' is the default conform-to-server behavior. */
+    fun setSourceOfTruth(value: String) {
+        val json = JSONObject().put("source_of_truth", value)
+        val body = json.toString().toRequestBody("application/json".toMediaType())
+        val req = authed("${baseUrl()}/api/device/source-of-truth").method("PATCH", body).build()
+        client.newCall(req).execute().use { resp -> requireSuccess(resp, "source-of-truth") }
     }
 
     /** Reports this device's actual free + total space (see

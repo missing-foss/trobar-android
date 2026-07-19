@@ -72,6 +72,8 @@
     <string name="section_sync">SYNCHRONISATION</string>
     <string name="hide_from_gallery_label">Masquer de la galerie</string>
     <string name="hide_from_gallery_description">Utile avec des lecteurs comme Poweramp</string>
+    <string name="keep_device_content_label">Conserver le contenu de l\'appareil</string>
+    <string name="keep_device_content_description">Le serveur ne supprimera pas les morceaux de cet appareil — il survit à une réinitialisation du serveur. Il peut toujours ajouter le nouveau contenu que vous sélectionnez.</string>
     <string name="missing_files_label">Fichiers supprimés localement</string>
     <string name="missing_files_description">Que faire quand un fichier synchronisé est introuvable sur cet appareil</string>
     <string name="missing_files_ask">Me demander</string>

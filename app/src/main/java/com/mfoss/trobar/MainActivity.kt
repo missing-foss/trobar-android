@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.HideImage
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
@@ -1057,6 +1058,33 @@ fun SettingsScreen(
                     selected = missingFileBehavior,
                     description = stringResource(R.string.missing_files_description),
                     onSelect = { value -> scope.launch { Prefs.setMissingFileBehavior(context, value) } },
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
+                // #63: 'device' source-of-truth — the server stops pruning this
+                // device's tracks, so it survives a server DB loss. Optimistic
+                // flip, reverted on error. Reflects the single server field.
+                SwitchRow(
+                    icon = Icons.Filled.Lock,
+                    label = stringResource(R.string.keep_device_content_label),
+                    description = stringResource(R.string.keep_device_content_description),
+                    checked = deviceInfo?.sourceOfTruth == "device",
+                    onCheckedChange = { keep ->
+                        val value = if (keep) "device" else "server"
+                        val previous = deviceInfo?.sourceOfTruth ?: "server"
+                        deviceInfo = deviceInfo?.copy(sourceOfTruth = value)
+                        scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    ApiClient(context, pairing.serverUrl, pairing.token)
+                                        .setSourceOfTruth(value)
+                                }
+                            } catch (e: Exception) {
+                                deviceInfo = deviceInfo?.copy(sourceOfTruth = previous)
+                                snackbarHostState.showSnackbar(
+                                    e.message ?: context.getString(R.string.save_failed_generic))
+                            }
+                        }
+                    },
                 )
             }
 

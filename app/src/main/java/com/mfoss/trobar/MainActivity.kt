@@ -321,7 +321,17 @@ fun humanReadablePath(context: Context, uri: Uri): String = try {
 fun CopyableError(text: String, onDismiss: (() -> Unit)? = null) {
     val clipboard = LocalClipboardManager.current
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(text, color = MaterialTheme.colorScheme.error)
+        // #45: a long/multi-line server error is bounded and scrolls in place,
+        // so it can't push the rest of the Status screen off a short viewport;
+        // the copy/clear actions below always stay reachable. A no-op for the
+        // common short error (below the cap).
+        Text(
+            text,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier
+                .heightIn(max = ERROR_MAX_HEIGHT)
+                .verticalScroll(rememberScrollState()),
+        )
         Row {
             TextButton(onClick = { clipboard.setText(AnnotatedString(text)) }) {
                 Text(stringResource(R.string.copy_error_button))
@@ -618,6 +628,8 @@ fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit, onReEnroll:
 }
 
 private const val BYTES_PER_GB = 1e9
+// #45: cap the Status error block's height; a longer message scrolls in place.
+private val ERROR_MAX_HEIGHT = 160.dp
 private const val EASTER_EGG_TAP_THRESHOLD = 5
 private const val TTT_BOARD_SIZE = 9
 

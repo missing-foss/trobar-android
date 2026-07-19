@@ -67,8 +67,8 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             // (SyncEngine.run calls it from plain code) — already on a
             // background dispatcher here, so blocking briefly is fine.
             runBlocking {
-                setProgress(workDataOf(KEY_DONE to p.done, KEY_TOTAL to p.total))
-                setForeground(buildForegroundInfo(applicationContext, p.done, p.total))
+                setProgress(workDataOf(KEY_DONE to p.done, KEY_TOTAL to p.total, KEY_SCANNING to p.scanning))
+                setForeground(buildForegroundInfo(applicationContext, p.done, p.total, p.scanning))
             }
         }
 
@@ -112,6 +112,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         const val KEY_IS_MANUAL = "is_manual"
         const val KEY_DONE = "done"
         const val KEY_TOTAL = "total"
+        const val KEY_SCANNING = "scanning"
         const val KEY_DOWNLOADED = "downloaded"
         const val KEY_DELETED = "deleted"
         const val KEY_FAILED = "failed"
@@ -131,7 +132,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             }
         }
 
-        private fun buildNotification(context: Context, done: Int, total: Int): Notification {
+        private fun buildNotification(context: Context, done: Int, total: Int, scanning: Boolean): Notification {
             ensureNotificationChannel(context)
             val builder = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
                 .setContentTitle("Trobar")
@@ -140,19 +141,20 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
                 .setSmallIcon(R.drawable.ic_notification)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
-            if (total > 0) {
-                builder.setContentText(context.getString(R.string.notification_sync_progress, done, total))
+            when {
+                scanning -> builder.setContentText(context.getString(R.string.recovery_scanning))
+                    .setProgress(0, 0, true)
+                total > 0 -> builder.setContentText(context.getString(R.string.notification_sync_progress, done, total))
                     .setProgress(total, done, false)
-            } else {
-                builder.setContentText(context.getString(R.string.sync_in_progress))
+                else -> builder.setContentText(context.getString(R.string.sync_in_progress))
                     .setProgress(0, 0, true)
             }
             return builder.build()
         }
 
-        private fun buildForegroundInfo(context: Context, done: Int, total: Int): ForegroundInfo =
+        private fun buildForegroundInfo(context: Context, done: Int, total: Int, scanning: Boolean = false): ForegroundInfo =
             ForegroundInfo(
-                NOTIFICATION_ID, buildNotification(context, done, total),
+                NOTIFICATION_ID, buildNotification(context, done, total, scanning),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
             )
 

@@ -23,7 +23,11 @@ data class SyncResult(
     // this run deliberately didn't act on them itself.
     val missingTracks: List<TrackRef> = emptyList(),
 )
-data class SyncProgress(val done: Int, val total: Int)
+// #40: `scanning` marks the recovery SAF tree-walk phase (before the first
+// pull), where `done` is a running count of audio files seen and `total` is 0
+// (indeterminate) — so the UI can say "Scanning your library…" instead of
+// showing a 0/0 sync.
+data class SyncProgress(val done: Int, val total: Int, val scanning: Boolean = false)
 
 /** Applies a server-computed diff (see ApiClient.getChanges) onto the SAF
  * tree the user picked. The server is the source of truth for what should
@@ -39,6 +43,8 @@ object SyncEngine {
     // throughput) dominates.
     private const val MAX_CONCURRENT_DOWNLOADS = 3
     private const val DOWNLOAD_RETRIES = 2
+    // #40: emit a recovery-scan progress tick every this-many audio files.
+    private const val SCAN_PROGRESS_STRIDE = 25
 
     // Only these (audio) files map to library tracks the manifest can match —
     // playlists (.m3u8), artist/cover art (.jpg) and .nomedia are skipped.
@@ -64,7 +70,7 @@ object SyncEngine {
         // #34 recovery: runs (and clears its flag) before the first pull; a
         // non-null return means it couldn't finish (network) — abort this sync
         // and retry, rather than proceeding into a prune/re-download.
-        recoverIfPending(context, api, root, recoveryPending)?.let {
+        recoverIfPending(context, api, root, recoveryPending, onProgress)?.let {
             return@coroutineScope SyncResult(0, 0, 0, it)
         }
 
@@ -205,9 +211,13 @@ object SyncEngine {
      * Returns an error message if it couldn't complete, else null. */
     private suspend fun recoverIfPending(
         context: Context, api: ApiClient, root: DocumentFile, recoveryPending: Boolean,
+        onProgress: (SyncProgress) -> Unit,
     ): String? {
         if (!recoveryPending) return null
-        val held = collectHeldPaths(root)
+        // #40: the tree-walk is the slow part of recovery; report a running
+        // count so the UI shows "Scanning your library…" rather than a silent
+        // pause on a large library.
+        val held = collectHeldPaths(root) { seen -> onProgress(SyncProgress(seen, 0, scanning = true)) }
         if (held.isNotEmpty()) {
             try {
                 api.setSourceOfTruth("device")
@@ -226,7 +236,7 @@ object SyncEngine {
      * emits (Artiste/Album/NN - Titre.ext), so the server's manifest matcher
      * recognizes them. Non-track files (playlists, artwork, .nomedia) are
      * skipped so `unmatched` reflects real unknown tracks. */
-    private fun collectHeldPaths(root: DocumentFile): List<String> {
+    private fun collectHeldPaths(root: DocumentFile, onScan: (Int) -> Unit = {}): List<String> {
         val out = mutableListOf<String>()
         fun walk(dir: DocumentFile, prefix: String) {
             for (child in dir.listFiles()) {
@@ -236,10 +246,14 @@ object SyncEngine {
                     walk(child, path)
                 } else if (name.substringAfterLast('.', "").lowercase() in AUDIO_EXTENSIONS) {
                     out.add(path)
+                    // Throttled so a big library doesn't fire a foreground/
+                    // WorkManager update per file.
+                    if (out.size % SCAN_PROGRESS_STRIDE == 0) onScan(out.size)
                 }
             }
         }
         walk(root, "")
+        onScan(out.size)
         return out
     }
 

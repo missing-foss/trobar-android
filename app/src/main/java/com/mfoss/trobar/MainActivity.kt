@@ -89,6 +89,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.Composable
@@ -403,6 +404,7 @@ fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit, onReEnroll:
     val syncing = workInfo?.state == WorkInfo.State.RUNNING || workInfo?.state == WorkInfo.State.ENQUEUED
     val done = workInfo?.progress?.getInt(SyncWorker.KEY_DONE, 0) ?: 0
     val total = workInfo?.progress?.getInt(SyncWorker.KEY_TOTAL, 0) ?: 0
+    val scanning = workInfo?.progress?.getBoolean(SyncWorker.KEY_SCANNING, false) ?: false
     val failureText = if (workInfo?.state == WorkInfo.State.FAILED) {
         context.getString(R.string.sync_failure, workInfo.outputData.toSyncResult().error)
     } else null
@@ -501,11 +503,24 @@ fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit, onReEnroll:
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        if (syncing) stringResource(R.string.sync_in_progress) else stringResource(R.string.tap_logo_to_sync),
+                        when {
+                            scanning -> stringResource(R.string.recovery_scanning)
+                            syncing -> stringResource(R.string.sync_in_progress)
+                            else -> stringResource(R.string.tap_logo_to_sync)
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     if (syncing) {
-                        if (total > 0) {
+                        if (scanning) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            if (done > 0) {
+                                Text(
+                                    pluralStringResource(R.plurals.recovery_files_scanned, done, done),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.outline,
+                                )
+                            }
+                        } else if (total > 0) {
                             LinearProgressIndicator(
                                 progress = { done.toFloat() / total.toFloat() },
                                 modifier = Modifier.fillMaxWidth(),

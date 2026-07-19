@@ -44,6 +44,11 @@
 
     <string name="settings_title">Settings</string>
     <string name="sync_in_progress">Sync in progress…</string>
+    <string name="recovery_scanning">Scanning your library…</string>
+    <plurals name="recovery_files_scanned">
+        <item quantity="one">%1$d file found</item>
+        <item quantity="other">%1$d files found</item>
+    </plurals>
     <string name="tap_logo_to_sync">Tap the logo to sync</string>
     <string name="sync_progress_count">%1$d / %2$d</string>
     <string name="last_sync">Last sync: %1$s</string>

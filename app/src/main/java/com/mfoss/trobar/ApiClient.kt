@@ -20,6 +20,12 @@ data class Changes(val toDownload: List<TrackRef>, val toDelete: List<TrackDelet
                    val playlists: List<PlaylistRef> = emptyList())
 /** a server-generated.m3u8 for one playlist assigned to this device. */
 data class PlaylistRef(val name: String, val filename: String, val content: String)
+
+/** #34: the device API returned 401 — the token is no longer valid (e.g. the
+ * server was reinstalled). Distinct from a plain network failure so the UI can
+ * offer Re-enroll instead of Retry. Subclasses IOException so existing broad
+ * catches keep working. */
+class UnauthorizedException(message: String) : IOException(message)
 data class DeviceInfo(val name: String, val maxSizeBytes: Long?, val deviceType: String,
                       val artistImages: String? = null, val sourceOfTruth: String = "server")
 
@@ -63,6 +69,11 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
     }
 
     private fun requireSuccess(resp: Response, action: String) {
+        // #34: a 401 means the token was rejected (e.g. the server was
+        // reinstalled clean and no longer knows this device) — distinct from a
+        // network error so the UI can offer Re-enroll rather than Retry.
+        if (resp.code == HTTP_UNAUTHORIZED) throw UnauthorizedException(
+            errorMessage(resp, appContext.getString(R.string.api_error_generic, action, resp.code)))
         if (!resp.isSuccessful) throw IOException(errorMessage(resp, appContext.getString(R.string.api_error_generic, action, resp.code)))
     }
 
@@ -209,5 +220,6 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
     private companion object {
         const val CONNECT_TIMEOUT_SECONDS = 15L
         const val READ_TIMEOUT_SECONDS = 60L
+        const val HTTP_UNAUTHORIZED = 401
     }
 }

@@ -42,6 +42,12 @@
     <string name="cancel_button">Cancel</string>
     <string name="limit_saved">Limit saved</string>
     <string name="save_failed_generic">Save failed</string>
+    <string name="conn_unreachable_title">Can\'t reach the server</string>
+    <string name="conn_unreachable_body">Your server is unavailable right now. Your downloaded music stays on the device.</string>
+    <string name="conn_unauthorized_title">Device not recognized</string>
+    <string name="conn_unauthorized_body">The server no longer recognizes this device — it may have been reset. Re-enroll to reconnect; your downloaded music stays on the device.</string>
+    <string name="conn_retry">Retry</string>
+    <string name="conn_re_enroll">Re-enroll</string>
 
     <string name="unpair_dialog_title">Unpair this device?</string>
     <string name="unpair_dialog_text">The device will no longer receive syncs until it\'s re-paired with a new QR code.</string>

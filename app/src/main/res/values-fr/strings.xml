@@ -42,6 +42,12 @@
     <string name="cancel_button">Annuler</string>
     <string name="limit_saved">Limite enregistrée</string>
     <string name="save_failed_generic">Échec de l\'enregistrement</string>
+    <string name="conn_unreachable_title">Serveur injoignable</string>
+    <string name="conn_unreachable_body">Votre serveur est indisponible pour le moment. Votre musique téléchargée reste sur l\'appareil.</string>
+    <string name="conn_unauthorized_title">Appareil non reconnu</string>
+    <string name="conn_unauthorized_body">Le serveur ne reconnaît plus cet appareil — il a peut-être été réinitialisé. Réinscrivez-vous pour vous reconnecter ; votre musique téléchargée reste sur l\'appareil.</string>
+    <string name="conn_retry">Réessayer</string>
+    <string name="conn_re_enroll">Se réinscrire</string>
 
     <string name="unpair_dialog_title">Dissocier cet appareil ?</string>
     <string name="unpair_dialog_text">L\'appareil ne recevra plus de synchros tant qu\'il n\'est pas réassocié avec un nouveau QR code.</string>

@@ -50,7 +50,6 @@ import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.HideImage
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
@@ -193,6 +192,10 @@ class MainActivity : ComponentActivity() {
             else -> StatusScreen(
                 pairing = pairing!!,
                 onOpenSettings = { showSettings = true },
+                // #34: Re-enroll on a persistent 401 — clear the (now-orphaned)
+                // pairing to return to pairing/enrollment; the local library +
+                // folder stay, which the recovery flow (part 3) builds on.
+                onReEnroll = { lifecycleScope.launch { Prefs.clearPairing(this@MainActivity) } },
             )
         }
     }
@@ -429,12 +432,17 @@ private fun parsePendingMissing(json: String?): List<MissingTrackInfo> {
     }
 }
 
+/** #34: which server-connectivity problem the app hit, if any. */
+enum class ConnState { OK, UNREACHABLE, UNAUTHORIZED }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit) {
+fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit, onReEnroll: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var deviceName by remember { mutableStateOf<String?>(null) }
+    var connState by remember { mutableStateOf(ConnState.OK) }
+    var retryKey by remember { mutableStateOf(0) }
     val lastSyncAt by Prefs.lastSyncAt(context).collectAsState(initial = null)
     val lastSyncError by Prefs.lastSyncError(context).collectAsState(initial = null)
     val pendingMissingJson by Prefs.pendingMissingTracks(context).collectAsState(initial = null)
@@ -473,10 +481,30 @@ fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit) {
         }
     }
 
-    LaunchedEffect(pairing) {
-        deviceName = try {
-            withContext(Dispatchers.IO) { ApiClient(context, pairing.serverUrl, pairing.token).getDeviceInfo().name }
-        } catch (ignored: Exception) { null }
+    // #34: probe the server on open. A 401 (token rejected — e.g. the server
+    // was reinstalled) surfaces the Re-enroll screen; any other failure (down /
+    // offline) surfaces Retry, without dropping the pairing.
+    LaunchedEffect(pairing, retryKey) {
+        try {
+            val info = withContext(Dispatchers.IO) {
+                ApiClient(context, pairing.serverUrl, pairing.token).getDeviceInfo()
+            }
+            deviceName = info.name
+            connState = ConnState.OK
+        } catch (ignored: UnauthorizedException) {
+            connState = ConnState.UNAUTHORIZED
+        } catch (ignored: Exception) {
+            connState = ConnState.UNREACHABLE
+        }
+    }
+
+    if (connState != ConnState.OK) {
+        ConnectionProblemScreen(
+            unauthorized = connState == ConnState.UNAUTHORIZED,
+            onRetry = { retryKey++ },
+            onReEnroll = onReEnroll,
+        )
+        return
     }
 
     Scaffold(

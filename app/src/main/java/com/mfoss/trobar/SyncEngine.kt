@@ -43,6 +43,8 @@ object SyncEngine {
     // throughput) dominates.
     private const val MAX_CONCURRENT_DOWNLOADS = 3
     private const val DOWNLOAD_RETRIES = 2
+    // #29: HTTP 206 Partial Content — the only response we may safely append to.
+    private const val HTTP_PARTIAL_CONTENT = 206
     // #40: emit a recovery-scan progress tick every this-many audio files.
     private const val SCAN_PROGRESS_STRIDE = 25
 
@@ -321,7 +323,16 @@ object SyncEngine {
             try {
                 api.downloadFile(track.trackId, resumeFrom).use { resp ->
                     val input = resp.body?.byteStream() ?: throw IOException(context.getString(R.string.empty_response))
-                    val mode = if (resumeFrom > 0) "wa" else "w"
+                    // #29: only append when the server actually returned 206
+                    // Partial Content. We ask for a range only on a resume
+                    // (resumeFrom > 0), but if a full 200 comes back anyway — a
+                    // transcoded stream that ignores Range, or a proxy that
+                    // dropped the header — appending its complete body onto the
+                    // partial bytes already on disk would corrupt the file, so
+                    // truncate instead. Belt-and-suspenders beyond the
+                    // transcode-flag gate above.
+                    val append = resumeFrom > 0 && resp.code == HTTP_PARTIAL_CONTENT
+                    val mode = if (append) "wa" else "w"
                     context.contentResolver.openOutputStream(file.uri, mode)?.use { output ->
                         input.copyTo(output)
                     } ?: throw IOException(context.getString(R.string.write_stream_unavailable))

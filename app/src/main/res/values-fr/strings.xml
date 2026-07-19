@@ -3,13 +3,25 @@
 
     <string name="internal_storage_prefix">Stockage interne/</string>
 
-    <string name="pairing_title">Associer cet appareil</string>
-    <string name="pairing_subtitle">Scanne le QR code dans Trobar ou\nsaisis les informations manuellement.</string>
     <string name="scan_qr_button">Scanner le QR code</string>
     <string name="server_url_label">URL du serveur</string>
     <string name="token_label">Token</string>
-    <string name="validate_button">Valider</string>
     <string name="copy_error_button">Copier l\'erreur</string>
+
+    <!-- Enrollment wizard (#34) -->
+    <string name="enroll_title">Inscrire cet appareil</string>
+    <string name="enroll_subtitle">Scanne le QR code dans Trobar ou\nsaisis l\'URL du serveur et le code ci-dessous.</string>
+    <string name="enroll_or_manual">ou saisis-le manuellement</string>
+    <string name="enroll_code_label">Code d\'inscription</string>
+    <string name="enroll_continue">Continuer</string>
+    <string name="device_name_label">Nom de l\'appareil</string>
+    <string name="transcode_label">Format audio</string>
+    <string name="transcode_originals">Originaux (sans transcodage)</string>
+    <string name="transcode_mp3_320">MP3 320 kbit/s</string>
+    <string name="enroll_code_expiry_note">Le code est à usage unique et expire 10 minutes après son affichage.</string>
+    <string name="enroll_button">Inscrire</string>
+    <string name="enroll_back">Retour</string>
+    <string name="enroll_failed_generic">Échec de l\'inscription</string>
     <string name="clear_error_button">Effacer</string>
 
     <string name="folder_picker_title">Dossier de synchronisation</string>

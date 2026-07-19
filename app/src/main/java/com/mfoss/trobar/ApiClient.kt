@@ -48,10 +48,7 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
     // so Accept-Language is the only signal it has for which language to
     // reply in. Reflects the same locale the app's own UI is currently
     // showing (explicit override, or the system locale under "System").
-    private fun currentLanguageTag(): String {
-        val locales = AppCompatDelegate.getApplicationLocales()
-        return if (!locales.isEmpty) (locales[0]?.language ?: "en") else java.util.Locale.getDefault().language
-    }
+    private fun currentLanguageTag(): String = appLanguageTag()
 
     private fun authed(url: String): Request.Builder =
         Request.Builder().url(url)
@@ -223,3 +220,64 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
         const val HTTP_UNAUTHORIZED = 401
     }
 }
+
+/** The app UI's current language (explicit override, else the system locale)
+ * as a bare language tag — the only locale signal the token-less device API
+ * has, since it carries no cookie/session. Shared by [ApiClient.authed] and the
+ * pre-pairing [redeemEnrollment] below. */
+internal fun appLanguageTag(): String {
+    val locales = AppCompatDelegate.getApplicationLocales()
+    return if (!locales.isEmpty) (locales[0]?.language ?: "en") else java.util.Locale.getDefault().language
+}
+
+/** #34/#162: the outcome of redeeming an enrollment code — the server created
+ * a device for us and handed back its Bearer token. */
+data class EnrollmentResult(val id: Long, val name: String, val token: String)
+
+/** #34/#162: redeem an enrollment code (scanned from a QR or typed by hand)
+ * against a server the app is not yet paired with. No auth header — the
+ * single-use code IS the credential. The server creates a device with these
+ * settings and returns its Bearer token, which the caller then stores and uses
+ * for every subsequent device-API call. Throws [IOException] carrying the
+ * server's localized message on 400 (invalid/expired/already-used code — get a
+ * fresh one) or 429 (rate-limited — back off). */
+fun redeemEnrollment(
+    context: Context,
+    serverUrl: String,
+    code: String,
+    name: String,
+    deviceType: String,
+    maxSizeBytes: Long?,
+    transcodeFormat: String?,
+): EnrollmentResult {
+    val payload = JSONObject()
+        .put("code", code)
+        .put("name", name)
+        .put("device_type", deviceType)
+        .put("max_size_bytes", maxSizeBytes ?: JSONObject.NULL)
+        .put("transcode_format", transcodeFormat ?: JSONObject.NULL)
+    val body = payload.toString().toRequestBody("application/json".toMediaType())
+    val client = OkHttpClient.Builder()
+        .connectTimeout(ENROLL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .readTimeout(ENROLL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .build()
+    val req = Request.Builder()
+        .url(serverUrl.trimEnd('/') + "/api/enrollment/redeem")
+        .header("Accept-Language", appLanguageTag())
+        .post(body)
+        .build()
+    client.newCall(req).execute().use { resp ->
+        val text = resp.body?.string()
+        if (!resp.isSuccessful) {
+            val serverMsg = try {
+                text?.let { JSONObject(it).optString("error") }?.takeIf { it.isNotBlank() }
+            } catch (ignored: Exception) { null }
+            throw IOException(serverMsg
+                ?: context.getString(R.string.api_error_generic, "enroll", resp.code))
+        }
+        val obj = JSONObject(text ?: "{}")
+        return EnrollmentResult(obj.getLong("id"), obj.optString("name", name), obj.getString("token"))
+    }
+}
+
+private const val ENROLL_TIMEOUT_SECONDS = 30L

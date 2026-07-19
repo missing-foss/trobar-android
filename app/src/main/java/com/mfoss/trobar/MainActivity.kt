@@ -116,8 +116,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.lifecycleScope
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -150,7 +148,7 @@ class MainActivity : ComponentActivity() {
         when {
             showAbout -> AboutScreen(onBack = { showAbout = false })
             pairing === NOT_LOADED -> Unit // still loading prefs, render nothing yet
-            pairing == null -> PairingScreen(onPaired = { url, token ->
+            pairing == null -> EnrollmentWizard(onEnrolled = { url, token ->
                 lifecycleScope.launch { Prefs.setPairing(this@MainActivity, url, token) }
             })
             treeUri == null -> FolderPickerScreen(onPicked = { uri ->
@@ -279,74 +277,6 @@ fun humanReadablePath(context: Context, uri: Uri): String = try {
     DocumentsContract.getTreeDocumentId(uri).replace("primary:", context.getString(R.string.internal_storage_prefix))
 } catch (ignored: Exception) {
     uri.toString()
-}
-
-@Composable
-fun PairingScreen(onPaired: (String, String) -> Unit) {
-    var serverUrl by remember { mutableStateOf("") }
-    var token by remember { mutableStateOf("") }
-
-    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
-        val raw = result.contents ?: return@rememberLauncherForActivityResult
-        try {
-            val json = JSONObject(raw)
-            onPaired(json.getString("server_url"), json.getString("token"))
-        } catch (ignored: Exception) {
-            // Not JSON — ignore, user can still fill the fields manually below.
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp)
-                .background(BrandGradientBrush),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                AppLogo(72.dp)
-                Spacer(Modifier.height(4.dp))
-                Text(stringResource(R.string.pairing_title), style = MaterialTheme.typography.headlineSmall, color = Color.White)
-                Text(
-                    stringResource(R.string.pairing_subtitle),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.85f),
-                    textAlign = TextAlign.Center,
-                )
-            }
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Button(
-                onClick = { scanLauncher.launch(ScanOptions().setOrientationLocked(false)) },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.scan_qr_button)) }
-            OutlinedTextField(
-                value = serverUrl, onValueChange = { serverUrl = it },
-                label = { Text(stringResource(R.string.server_url_label)) }, modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = token, onValueChange = { token = it },
-                label = { Text(stringResource(R.string.token_label)) }, modifier = Modifier.fillMaxWidth(),
-            )
-            Button(
-                onClick = { onPaired(serverUrl, token) },
-                enabled = serverUrl.isNotBlank() && token.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.validate_button)) }
-        }
-    }
 }
 
 /** Error text + a "Copier" button — added because plain on-screen error text

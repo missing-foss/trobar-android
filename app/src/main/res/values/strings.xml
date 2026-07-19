@@ -3,13 +3,25 @@
 
     <string name="internal_storage_prefix">Internal storage/</string>
 
-    <string name="pairing_title">Pair this device</string>
-    <string name="pairing_subtitle">Scan the QR code in Trobar or\nenter the information manually.</string>
     <string name="scan_qr_button">Scan QR code</string>
     <string name="server_url_label">Server URL</string>
     <string name="token_label">Token</string>
-    <string name="validate_button">Confirm</string>
     <string name="copy_error_button">Copy error</string>
+
+    <!-- Enrollment wizard (#34) -->
+    <string name="enroll_title">Enroll this device</string>
+    <string name="enroll_subtitle">Scan the QR code in Trobar or\nenter the server URL and code below.</string>
+    <string name="enroll_or_manual">or enter it manually</string>
+    <string name="enroll_code_label">Enrollment code</string>
+    <string name="enroll_continue">Continue</string>
+    <string name="device_name_label">Device name</string>
+    <string name="transcode_label">Audio format</string>
+    <string name="transcode_originals">Originals (no transcoding)</string>
+    <string name="transcode_mp3_320">MP3 320 kbit/s</string>
+    <string name="enroll_code_expiry_note">The code is single-use and expires 10 minutes after it\'s shown.</string>
+    <string name="enroll_button">Enroll</string>
+    <string name="enroll_back">Back</string>
+    <string name="enroll_failed_generic">Enrollment failed</string>
     <string name="clear_error_button">Clear</string>
 
     <string name="folder_picker_title">Sync folder</string>

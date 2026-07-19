@@ -72,6 +72,8 @@
     <string name="section_sync">SYNC</string>
     <string name="hide_from_gallery_label">Hide from gallery</string>
     <string name="hide_from_gallery_description">Useful with players like Poweramp</string>
+    <string name="keep_device_content_label">Keep device content</string>
+    <string name="keep_device_content_description">The server won\'t delete this device\'s tracks — it survives a server reset. It can still add new content you select.</string>
     <string name="missing_files_label">Locally deleted files</string>
     <string name="missing_files_description">What to do when a synced file is found missing on this device</string>
     <string name="missing_files_ask">Ask me</string>

@@ -48,6 +48,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         val treeUri = Prefs.treeUri(applicationContext).firstOrNull() ?: return@withContext Result.failure()
         val nomediaEnabled = Prefs.nomediaEnabled(applicationContext).firstOrNull() ?: false
         val missingFileBehavior = Prefs.missingFileBehavior(applicationContext).firstOrNull() ?: Prefs.MISSING_ASK
+        val recoveryPending = Prefs.recoveryPending(applicationContext).firstOrNull() ?: false
         val isManual = inputData.getBoolean(KEY_IS_MANUAL, false)
 
         // Promotes this work to a foreground service with a visible,
@@ -60,7 +61,8 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         setForeground(buildForegroundInfo(applicationContext, 0, 0))
 
         val api = ApiClient(applicationContext, pairing.serverUrl, pairing.token)
-        val result = SyncEngine.run(applicationContext, api, treeUri, nomediaEnabled, missingFileBehavior) { p ->
+        val result = SyncEngine.run(applicationContext, api, treeUri, nomediaEnabled, missingFileBehavior,
+            recoveryPending) { p ->
             // setProgress/setForeground are suspend; this callback isn't
             // (SyncEngine.run calls it from plain code) — already on a
             // background dispatcher here, so blocking briefly is fine.

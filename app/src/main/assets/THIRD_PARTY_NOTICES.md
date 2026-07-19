@@ -57,7 +57,8 @@ JSON-licensed artifact; see `app/build.gradle.kts` and #28.)
 
 - **AndroidX** (`androidx.appcompat`, `androidx.core:core-ktx`,
   `androidx.activity:activity-compose`, `androidx.compose.*` [BOM 2026.06.01:
-  ui, material3, material-icons-core, material-icons-extended, ui-tooling-preview],
+  ui, material3, material3-window-size-class, material-icons-core,
+  material-icons-extended, ui-tooling-preview],
   `androidx.lifecycle:lifecycle-runtime-ktx`, `androidx.work:work-runtime-ktx`,
   `androidx.datastore:datastore-preferences`, `androidx.documentfile`) —
   Copyright (C) The Android Open Source Project

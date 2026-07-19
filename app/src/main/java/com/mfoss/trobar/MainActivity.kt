@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -66,6 +67,8 @@ import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -89,6 +92,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -126,6 +130,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
+    @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Upgrade any legacy plaintext token to Keystore-encrypted at rest.
@@ -145,9 +150,15 @@ class MainActivity : ComponentActivity() {
                     else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 }
             }
+            val windowSizeClass = calculateWindowSizeClass(this)
             TrobarTheme(dynamicColor = dynamicColor) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    AppRoot()
+                    CompositionLocalProvider(
+                        LocalWindowWidthSizeClass provides windowSizeClass.widthSizeClass,
+                        LocalWindowHeightSizeClass provides windowSizeClass.heightSizeClass,
+                    ) {
+                        AppRoot()
+                    }
                 }
             }
         }
@@ -329,30 +340,9 @@ fun FolderPickerScreen(onPicked: (android.net.Uri) -> Unit) {
         if (uri != null) onPicked(uri)
     }
     Column(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp)
-                .background(BrandGradientBrush),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                AppLogo(72.dp)
-                Spacer(Modifier.height(4.dp))
-                Text(stringResource(R.string.folder_picker_title), style = MaterialTheme.typography.headlineSmall, color = Color.White)
-                Text(
-                    stringResource(R.string.folder_picker_subtitle),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.85f),
-                    textAlign = TextAlign.Center,
-                )
-            }
-        }
+        BrandHeader(stringResource(R.string.folder_picker_title), stringResource(R.string.folder_picker_subtitle))
         Column(
-            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            modifier = Modifier.align(Alignment.CenterHorizontally).then(adaptiveContentWidth()).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -915,10 +905,12 @@ fun SettingsScreen(
             )
         },
     ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
+                .align(Alignment.TopCenter)
+                .then(adaptiveContentWidth())
+                .fillMaxHeight()
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -1155,6 +1147,7 @@ fun SettingsScreen(
             ) {
                 Text(stringResource(R.string.unpair_device_button))
             }
+        }
         }
     }
 }
@@ -1439,6 +1432,8 @@ private fun TicTacToeDialog(onDismiss: () -> Unit) {
                     fontWeight = FontWeight.SemiBold,
                     style = MaterialTheme.typography.titleLarge,
                 )
+                // #38: a roomier board on tablets / unfolded foldables.
+                val cell = if (isCompactWidth()) 64.dp else 88.dp
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     for (row in 0..2) {
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1446,7 +1441,7 @@ private fun TicTacToeDialog(onDismiss: () -> Unit) {
                                 val i = row * 3 + col
                                 Surface(
                                     modifier = Modifier
-                                        .width(64.dp)
+                                        .width(cell)
                                         .aspectRatio(1f)
                                         .clickable { playerTap(i) },
                                     shape = RoundedCornerShape(8.dp),

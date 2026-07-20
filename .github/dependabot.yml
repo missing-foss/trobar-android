@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 missing-foss
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Dependabot version updates. Security alerts (Dependabot alerts) scan the
 # dependency graph automatically regardless of this file; this config only
 # governs scheduled version-bump PRs, kept conservative (weekly, capped) so

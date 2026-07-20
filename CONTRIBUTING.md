@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 missing-foss
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # Contributing
 
 This is the Android client of Trobar — the contribution guidelines,

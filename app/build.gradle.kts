@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 missing-foss
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.cert.X509Certificate

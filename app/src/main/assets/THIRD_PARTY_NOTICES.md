@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 missing-foss
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # Third-Party Notices
 
 Trobar redistributes the third-party components listed below — bundled fonts, the

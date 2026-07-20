@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 missing-foss
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # Trobar for Android
 
 The Android client of [Trobar](https://github.com/missing-foss/trobar-server)

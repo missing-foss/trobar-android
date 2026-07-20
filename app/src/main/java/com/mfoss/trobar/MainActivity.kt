@@ -56,7 +56,6 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.SdCard
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Smartphone
@@ -68,6 +67,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -138,20 +138,23 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch { Prefs.migrateTokenIfNeeded(this@MainActivity) }
         setContent {
             val dynamicColor by Prefs.useDynamicColor(this).collectAsState(initial = false)
-            // #38: apply the per-app orientation lock. requestedOrientation is
-            // per-activity and overrides the system auto-rotate toggle, so
-            // "Portrait" keeps the app portrait even when the device isn't —
-            // except on large screens, where Android 16+ may ignore it (noted
-            // in the setting's help text).
-            val orientation by Prefs.orientation(this).collectAsState(initial = Prefs.ORIENT_AUTO)
-            LaunchedEffect(orientation) {
-                requestedOrientation = when (orientation) {
-                    Prefs.ORIENT_PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                    Prefs.ORIENT_LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                    else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            val windowSizeClass = calculateWindowSizeClass(this)
+            // #54: phones are portrait-only; large screens (tablets, foldables)
+            // are left system-managed and resizable. That's the direction the
+            // platform is forcing anyway — Android 16 ignores an app's
+            // orientation on large screens at targetSdk 36, and Android 17 drops
+            // the opt-out — so this is ready ahead of the targetSdk bump.
+            // Leaving large screens UNSPECIFIED (no requestedOrientation churn)
+            // is also what kills the earlier tablet flicker.
+            val isCompact =
+                windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+            LaunchedEffect(isCompact) {
+                requestedOrientation = if (isCompact) {
+                    ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                } else {
+                    ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 }
             }
-            val windowSizeClass = calculateWindowSizeClass(this)
             TrobarTheme(dynamicColor = dynamicColor) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     CompositionLocalProvider(
@@ -816,7 +819,6 @@ fun SettingsScreen(
     var showNomediaWarning by remember { mutableStateOf(false) }
     val networkMode by Prefs.networkMode(context).collectAsState(initial = Prefs.NETWORK_WIFI_ONLY)
     val useDynamicColor by Prefs.useDynamicColor(context).collectAsState(initial = false)
-    val orientation by Prefs.orientation(context).collectAsState(initial = Prefs.ORIENT_AUTO)
     val nomediaEnabled by Prefs.nomediaEnabled(context).collectAsState(initial = false)
     val missingFileBehavior by Prefs.missingFileBehavior(context).collectAsState(initial = Prefs.MISSING_ASK)
     val scope = rememberCoroutineScope()
@@ -1129,19 +1131,6 @@ fun SettingsScreen(
                             else LocaleListCompat.forLanguageTags(tag),
                         )
                     },
-                )
-                HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
-                ChoiceRow(
-                    icon = Icons.Filled.ScreenRotation,
-                    label = stringResource(R.string.orientation_label),
-                    description = stringResource(R.string.orientation_help),
-                    options = listOf(
-                        Prefs.ORIENT_AUTO to stringResource(R.string.orientation_auto),
-                        Prefs.ORIENT_PORTRAIT to stringResource(R.string.orientation_portrait),
-                        Prefs.ORIENT_LANDSCAPE to stringResource(R.string.orientation_landscape),
-                    ),
-                    selected = orientation,
-                    onSelect = { scope.launch { Prefs.setOrientation(context, it) } },
                 )
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     HorizontalDivider(modifier = Modifier.padding(start = 54.dp))

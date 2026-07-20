@@ -28,7 +28,6 @@ object Prefs {
     private val NOMEDIA = booleanPreferencesKey("nomedia")
     private val MISSING_FILE_BEHAVIOR = stringPreferencesKey("missing_file_behavior")
     private val PENDING_MISSING_TRACKS = stringPreferencesKey("pending_missing_tracks")
-    private val ORIENTATION = stringPreferencesKey("orientation")
 
     // "wifi_only" | "wifi_and_mobile" | "any" (any = incl. roaming)
     const val NETWORK_WIFI_ONLY = "wifi_only"
@@ -40,14 +39,6 @@ object Prefs {
     const val MISSING_ASK = "ask"
     const val MISSING_ALWAYS_RESYNC = "always_resync"
     const val MISSING_ALWAYS_EXCLUDE = "always_exclude"
-
-    // #38: per-app screen orientation. "auto" follows the system (honoring its
-    // rotation lock); "portrait"/"landscape" pin the app via
-    // requestedOrientation, overriding the system auto-rotate toggle for this
-    // app only (may not stick on large screens — Android 16+ can override it).
-    const val ORIENT_AUTO = "auto"
-    const val ORIENT_PORTRAIT = "portrait"
-    const val ORIENT_LANDSCAPE = "landscape"
 
     data class Pairing(val serverUrl: String, val token: String)
 
@@ -107,13 +98,6 @@ object Prefs {
 
     suspend fun setTreeUri(context: Context, uri: String) {
         context.dataStore.edit { it[TREE_URI] = uri }
-    }
-
-    fun orientation(context: Context): Flow<String> =
-        context.dataStore.data.map { it[ORIENTATION] ?: ORIENT_AUTO }
-
-    suspend fun setOrientation(context: Context, value: String) {
-        context.dataStore.edit { it[ORIENTATION] = value }
     }
 
     /** #34: set when a device (re-)enrolls; the next sync checks whether the

@@ -106,7 +106,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
     implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("com.squareup.okhttp3:okhttp:5.4.0")
     // org.json is part of the Android platform (bootclasspath, since API 1), so

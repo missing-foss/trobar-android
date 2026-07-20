@@ -120,11 +120,6 @@
     <string name="dynamic_color_description">Theme based on wallpaper</string>
     <string name="language_label">Language</string>
     <string name="language_system">System</string>
-    <string name="orientation_label">Screen orientation</string>
-    <string name="orientation_auto">Auto (follow system)</string>
-    <string name="orientation_portrait">Portrait</string>
-    <string name="orientation_landscape">Landscape</string>
-    <string name="orientation_help">Locks this app to portrait or landscape, even when the system auto-rotates. On large screens (tablets, unfolded foldables) Android may ignore the lock and rotate anyway.</string>
 
     <string name="unpair_device_button">Unpair this device</string>
 

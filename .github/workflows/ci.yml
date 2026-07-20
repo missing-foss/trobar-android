@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 missing-foss
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Android CI: the pre-merge verify gate. Runs on every push/PR.
 # NO release keystore in CI — release builds are signed locally and the
 # build.gradle.kts guard pins the canonical key. Read-only token, pinned majors.
@@ -38,3 +42,8 @@ jobs:
           v=8.24.3
           curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${v}/gitleaks_${v}_linux_x64.tar.gz" | tar -xz gitleaks
           ./gitleaks git --no-banner .
+      - name: REUSE lint (per-file SPDX licensing, #50)
+        # Python tool; the org Actions policy blocks fsfe/reuse-action, so run it
+        # via pipx (preinstalled on the runner). The charset-normalizer extra
+        # supplies reuse's encoding detection without needing libmagic.
+        run: pipx run --spec 'reuse[charset-normalizer]' reuse lint

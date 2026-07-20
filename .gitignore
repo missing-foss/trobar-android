@@ -5,3 +5,7 @@ local.properties
 .idea/
 *.keystore
 *.jks
+
+# CI secret-scan downloads this binary into the tree; keep it out of git
+# and out of reuse lint (#50, mirrors trobar-server#181).
+/gitleaks

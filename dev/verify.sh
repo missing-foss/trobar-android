@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2026 missing-foss
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Pre-push verification gate for trobar-android. Run from the repo root:
 #   dev/verify.sh
 # CI (.github/workflows/ci.yml) runs the same checks. Signed release builds
@@ -31,6 +36,16 @@ if command -v gitleaks >/dev/null 2>&1; then
   gitleaks git --no-banner . && echo ok || fail=1
 else
   echo "SKIP (gitleaks not installed) — CI still runs it"
+fi
+
+step "REUSE (per-file SPDX licensing, #50)"
+# Every file must declare copyright + license (inline SPDX header, or via
+# REUSE.toml for binaries / fonts / the vendored Gradle wrapper). A new
+# unlicensed file then fails here rather than shipping unattributed.
+if command -v reuse >/dev/null 2>&1; then
+  if reuse lint >/dev/null 2>&1; then echo ok; else reuse lint | tail -20; fail=1; fi
+else
+  echo "SKIP (reuse not installed — pipx install reuse) — CI still runs it"
 fi
 
 echo

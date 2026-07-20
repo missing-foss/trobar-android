@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 missing-foss
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Overrides on top of detekt's own recommended default rule set
 # (buildUponDefaultConfig = true in app/build.gradle.kts). Every override
 # below reflects a reviewed judgment call, not a blanket suppression —

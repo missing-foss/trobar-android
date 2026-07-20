@@ -71,6 +71,16 @@ android {
     buildFeatures {
         compose = true
     }
+    lint {
+        // #52: EN/FR string parity is a build gate. A new string with no FR
+        // translation (MissingTranslation) — or a dangling FR whose EN was
+        // removed (ExtraTranslation) — fails the build. Scoped to just those
+        // two so `lintDebug` stays a fast, focused i18n check, not the full
+        // lint suite (the app's other lint findings aren't gated here).
+        checkOnly += listOf("MissingTranslation", "ExtraTranslation")
+        error += listOf("MissingTranslation", "ExtraTranslation")
+        abortOnError = true
+    }
 }
 
 detekt {

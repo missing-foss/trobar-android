@@ -13,6 +13,11 @@ step "debug build"
 step "static analysis (detekt)"
 ./gradlew detekt && echo ok || fail=1
 
+step "translations (EN/FR parity — MissingTranslation lint, #52)"
+# A new string without a values-fr/ counterpart (or a dangling FR whose EN was
+# removed) fails the build — scoped to those two lint checks in build.gradle.kts.
+./gradlew lintDebug && echo ok || fail=1
+
 step "leak scan (household infra must never ship)"
 if git ls-files | xargs grep -InE "mphp|soundsync|renoir|192\.168\.50|/nfs/" 2>/dev/null \
      | grep -viE "\.lock$|workflows/ci\.yml|dev/verify\.sh"; then

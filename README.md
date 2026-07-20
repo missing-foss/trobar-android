@@ -6,6 +6,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 # Trobar for Android
 
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/missing-foss/trobar-android/badge)](https://securityscorecards.dev/viewer/?uri=github.com/missing-foss/trobar-android)
+
 The Android client of [Trobar](https://github.com/missing-foss/trobar-server)
 — self-hosted music library sync. Pick artists, albums, or playlists in the
 web app; this client keeps them offline on the phone, tablet, watch, or

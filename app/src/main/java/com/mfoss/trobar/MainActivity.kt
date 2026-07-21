@@ -1336,7 +1336,7 @@ fun AboutScreen(onBack: () -> Unit) {
             SectionLabel(stringResource(R.string.about_links_section))
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 TileRow(Icons.Filled.Info, stringResource(R.string.about_documentation), "",
-                    onClick = { openUrl("https://github.com/missing-foss/trobar-server/blob/main/docs/clients.md") })
+                    onClick = { openUrl("https://missing-foss.github.io/trobar-server/") })
                 HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
                 TileRow(Icons.Filled.Cloud, stringResource(R.string.about_source_code), "",
                     onClick = { openUrl("https://github.com/missing-foss/trobar-android") })

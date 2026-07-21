@@ -79,8 +79,8 @@ later update is ever signed by a different key.
 
 Create a device in the Trobar web app and scan the QR code with the app's
 pairing screen, then pick a sync folder. Full walkthrough:
-[docs/clients.md](https://github.com/missing-foss/trobar-server/blob/main/docs/clients.md)
-in the server repository.
+[the Android client guide](https://missing-foss.github.io/trobar-server/clients/android/)
+in the Trobar documentation.
 
 ## Build
 

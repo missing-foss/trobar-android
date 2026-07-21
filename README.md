@@ -46,12 +46,7 @@ https://github.com/missing-foss/trobar-android
 
 That's the reliable method everywhere. There's also a one-tap button:
 
-[<img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Add to Obtainium" height="54">](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/missing-foss/trobar-android)
-
-— but on hardened browsers (e.g. Vanadium on GrapheneOS) the automatic
-hand-off to Obtainium is blocked; if tapping it just sits on "Redirecting…",
-use the **"Click here if you are not redirected"** link on that page, or fall
-back to the paste method above.
+[<img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Add to Obtainium" height="80">](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/missing-foss/trobar-android)
 
 **Without Obtainium**: download the APK from
 [Releases](https://github.com/missing-foss/trobar-android/releases)

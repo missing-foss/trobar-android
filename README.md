@@ -14,6 +14,27 @@ web app; this client keeps them offline on the phone, tablet, watch, or
 Android-based DAP, in original quality (or transcoded, if the device is set
 up that way server-side).
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/phone-01-pairing.png" width="200" alt="Enroll this device">
+  <img src="docs/screenshots/phone-02-status-paired.png" width="200" alt="Sync status">
+  <img src="docs/screenshots/phone-05-settings.png" width="200" alt="Settings">
+  <img src="docs/screenshots/phone-02-status-dark.png" width="200" alt="Sync status (dark theme)">
+</p>
+
+<sub>Enroll · sync status · settings · dark theme. Captured on a Pixel 6
+emulator against the synthetic dev library — no real or copyrighted content.
+More (syncing, synced, enrollment config, dark settings) under
+[`docs/screenshots/`](docs/screenshots/).</sub>
+
+<p align="center">
+  <img src="docs/screenshots/tablet-01-pairing.png" width="520" alt="Tablet — adaptive, centred layout">
+</p>
+
+<sub>On tablets and foldables the layout adapts (#38) — content is centred at a
+readable max-width instead of stretched edge-to-edge.</sub>
+
 ## Install
 
 **With [Obtainium](https://github.com/ImranR98/Obtainium)** (recommended — automatic updates):

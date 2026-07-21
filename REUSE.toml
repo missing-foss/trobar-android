@@ -38,6 +38,13 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 missing-foss"
 SPDX-License-Identifier = "GPL-3.0-or-later"
 
+# --- README screenshots (#22): captured against the synthetic dev library ---
+[[annotations]]
+path = "docs/screenshots/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 missing-foss"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
 # --- .gitignore (no header) ------------------------------------------------
 [[annotations]]
 path = ".gitignore"

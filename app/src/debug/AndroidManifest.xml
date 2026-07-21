@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: 2026 missing-foss -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- #63: debug-only network security config (scoped cleartext for the local dev
+     server). The release build keeps the main manifest's HTTPS-only policy.
+     networkSecurityConfig takes precedence over the main manifest's
+     usesCleartextTraffic="false" at runtime, so no tools:replace is needed. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:networkSecurityConfig="@xml/network_security_config_debug" />
+</manifest>

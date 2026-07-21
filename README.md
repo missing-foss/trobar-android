@@ -28,6 +28,13 @@ emulator against the synthetic dev library — no real or copyrighted content.
 More (syncing, synced, enrollment config, dark settings) under
 [`docs/screenshots/`](docs/screenshots/).</sub>
 
+<p align="center">
+  <img src="docs/screenshots/tablet-01-pairing.png" width="520" alt="Tablet — adaptive, centred layout">
+</p>
+
+<sub>On tablets and foldables the layout adapts (#38) — content is centred at a
+readable max-width instead of stretched edge-to-edge.</sub>
+
 ## Install
 
 **With [Obtainium](https://github.com/ImranR98/Obtainium)** (recommended — automatic updates):

@@ -25,6 +25,7 @@ android {
         targetSdk = 34
         versionCode = 44
         versionName = "2.10.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // #61
     }
 
     signingConfigs {
@@ -117,4 +118,11 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("androidx.documentfile:documentfile:1.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+
+    // #61: instrumented Compose UI tests — ./gradlew connectedAndroidTest (needs
+    // a device/emulator). ui-test-manifest lets the harness host composables.
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.06.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

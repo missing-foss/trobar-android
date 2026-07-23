@@ -457,8 +457,10 @@ fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit, onReEnroll:
     if (connState != ConnState.OK) {
         ConnectionProblemScreen(
             unauthorized = connState == ConnState.UNAUTHORIZED,
+            serverUrl = pairing.serverUrl,
             onRetry = { retryKey++ },
             onReEnroll = onReEnroll,
+            onServerUrlChanged = { url -> scope.launch { Prefs.setServerUrl(context, url) } },
         )
         return
     }

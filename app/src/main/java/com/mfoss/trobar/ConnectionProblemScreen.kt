@@ -18,7 +18,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -28,10 +33,21 @@ import androidx.compose.ui.unit.dp
 /** #34: shown when the app can't operate against its server. A 401
  * (unauthorized — the server no longer knows this device, e.g. after a
  * reinstall) offers Re-enroll; any other failure (unreachable / down) offers
- * Retry, without dropping the pairing. */
+ * Retry plus two escape hatches (#72) — editing the server address (same
+ * server, new location: DDNS/port/proxy change, pairing preserved) or
+ * re-pairing outright (genuinely different server) — without dropping the
+ * pairing on Retry's own account. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConnectionProblemScreen(unauthorized: Boolean, onRetry: () -> Unit, onReEnroll: () -> Unit) {
+fun ConnectionProblemScreen(
+    unauthorized: Boolean,
+    serverUrl: String,
+    onRetry: () -> Unit,
+    onReEnroll: () -> Unit,
+    onServerUrlChanged: (String) -> Unit,
+) {
+    var showServerDialog by remember { mutableStateOf(false) }
+
     Scaffold { innerPadding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(innerPadding).padding(24.dp),
@@ -62,7 +78,26 @@ fun ConnectionProblemScreen(unauthorized: Boolean, onRetry: () -> Unit, onReEnro
                 Button(onClick = onReEnroll) { Text(stringResource(R.string.conn_re_enroll)) }
             } else {
                 Button(onClick = onRetry) { Text(stringResource(R.string.conn_retry)) }
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = { showServerDialog = true }) {
+                    Text(stringResource(R.string.conn_change_server))
+                }
+                TextButton(onClick = onReEnroll) { Text(stringResource(R.string.conn_re_pair)) }
             }
         }
+    }
+
+    if (showServerDialog) {
+        EditValueDialog(
+            title = stringResource(R.string.server_address_dialog_title),
+            label = stringResource(R.string.url_label),
+            initial = serverUrl,
+            onDismiss = { showServerDialog = false },
+            onConfirm = { url ->
+                showServerDialog = false
+                onServerUrlChanged(url)
+                onRetry()
+            },
+        )
     }
 }

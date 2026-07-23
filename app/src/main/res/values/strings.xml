@@ -71,6 +71,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="conn_unauthorized_body">The server no longer recognizes this device — it may have been reset. Re-enroll to reconnect; your downloaded music stays on the device.</string>
     <string name="conn_retry">Retry</string>
     <string name="conn_re_enroll">Re-enroll</string>
+    <string name="conn_change_server">Change server address</string>
+    <string name="conn_re_pair">Re-pair</string>
 
     <string name="unpair_dialog_title">Unpair this device?</string>
     <string name="unpair_dialog_text">The device will no longer receive syncs until it\'s re-paired with a new QR code.</string>

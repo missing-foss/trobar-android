@@ -93,11 +93,18 @@ fun ConnectionProblemScreen(
             label = stringResource(R.string.url_label),
             initial = serverUrl,
             onDismiss = { showServerDialog = false },
+            // The retry itself is NOT triggered from here — onServerUrlChanged
+            // is responsible for retrying only once its own write actually
+            // completes (see StatusScreen's wiring). Firing onRetry() here as
+            // well would race it: Prefs.setServerUrl is a suspend write, so an
+            // immediate onRetry() could re-probe against the still-old
+            // pairing.serverUrl, fail, and read as "the change didn't take"
+            // even though it's about to.
             onConfirm = { url ->
                 showServerDialog = false
-                onServerUrlChanged(url)
-                onRetry()
+                onServerUrlChanged(url.trim())
             },
+            isValid = { it.trim().let { u -> u.startsWith("http://") || u.startsWith("https://") } },
         )
     }
 }

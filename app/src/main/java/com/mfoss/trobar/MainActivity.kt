@@ -460,7 +460,18 @@ fun StatusScreen(pairing: Prefs.Pairing, onOpenSettings: () -> Unit, onReEnroll:
             serverUrl = pairing.serverUrl,
             onRetry = { retryKey++ },
             onReEnroll = onReEnroll,
-            onServerUrlChanged = { url -> scope.launch { Prefs.setServerUrl(context, url) } },
+            // retryKey++ happens INSIDE this coroutine, after the suspend
+            // write completes — not as a separate onRetry() call from the
+            // dialog itself. Prefs.setServerUrl is async; bumping retryKey
+            // synchronously right after calling it (as an earlier version of
+            // this did) could re-probe against the still-old pairing.serverUrl
+            // before the write lands, making a real fix look like it failed.
+            onServerUrlChanged = { url ->
+                scope.launch {
+                    Prefs.setServerUrl(context, url)
+                    retryKey++
+                }
+            },
         )
         return
     }
@@ -770,6 +781,11 @@ fun EditValueDialog(
     initial: String,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
+    // Disables Save rather than showing an inline error — matches
+    // EnrollmentWizard's existing disable-until-valid convention rather than
+    // introducing a new error-message pattern for one dialog. Defaults to
+    // "anything goes" so existing callers (storage limit, etc.) are unaffected.
+    isValid: (String) -> Boolean = { true },
 ) {
     var field by remember { mutableStateOf(initial) }
     AlertDialog(
@@ -784,7 +800,7 @@ fun EditValueDialog(
             )
         },
         confirmButton = {
-            Button(onClick = { onConfirm(field) }) { Text(stringResource(R.string.save_button)) }
+            Button(onClick = { onConfirm(field) }, enabled = isValid(field)) { Text(stringResource(R.string.save_button)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) } },
     )

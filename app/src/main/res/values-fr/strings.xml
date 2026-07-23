@@ -71,6 +71,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="conn_unauthorized_body">Le serveur ne reconnaît plus cet appareil — il a peut-être été réinitialisé. Réinscrivez-vous pour vous reconnecter ; votre musique téléchargée reste sur l\'appareil.</string>
     <string name="conn_retry">Réessayer</string>
     <string name="conn_re_enroll">Se réinscrire</string>
+    <string name="conn_change_server">Changer l\'adresse du serveur</string>
+    <string name="conn_re_pair">Réassocier</string>
 
     <string name="unpair_dialog_title">Dissocier cet appareil ?</string>
     <string name="unpair_dialog_text">L\'appareil ne recevra plus de synchros tant qu\'il n\'est pas réassocié avec un nouveau QR code.</string>

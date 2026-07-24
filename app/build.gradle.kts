@@ -125,4 +125,9 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+    // Same version as the app's own OkHttp dep (line 112) — a real local HTTP
+    // server standing in for trobar-server, so EnrollmentWizard/SettingsScreen/
+    // StatusScreen's actual ApiClient/redeemEnrollment network calls hit
+    // something real rather than needing a mocking seam neither has today.
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:5.4.0")
 }

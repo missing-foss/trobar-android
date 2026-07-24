@@ -25,6 +25,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -112,7 +113,9 @@ import kotlin.random.Random
 import androidx.documentfile.provider.DocumentFile
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -705,10 +708,17 @@ fun SwitchRow(
     description: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
+            // The whole row toggles, not just the small Switch thumb — a bigger
+            // tap target and one screen-reader stop. toggleable() merges
+            // descendant semantics on its own, so the Switch below is set to
+            // onCheckedChange = null: it stays purely visual so its own touch
+            // target doesn't compete with the Row's.
+            .toggleable(value = checked, onValueChange = onCheckedChange, role = Role.Switch)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -720,7 +730,7 @@ fun SwitchRow(
             Text(description, style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 
@@ -1161,6 +1171,12 @@ fun SettingsScreen(
                         onCheckedChange = { enabled ->
                             scope.launch { Prefs.setUseDynamicColor(context, enabled) }
                         },
+                        // #61: SwitchRow's own toggleable() already merges this
+                        // row into one semantics node; testTag just makes it
+                        // addressable in SettingsScreenTest, since the other
+                        // rows' labels aren't unique enough to disambiguate
+                        // three switches on this screen otherwise.
+                        modifier = Modifier.testTag("dynamic_color_switch"),
                     )
                 }
             }

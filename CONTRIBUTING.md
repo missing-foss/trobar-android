@@ -14,4 +14,6 @@ are `GPL-3.0-or-later` like the client itself.
 
 Public issues and PRs live here on GitHub.
 
+Contributing a translation? See [Translating Trobar](https://missing-foss.github.io/trobar-server/project/translations/).
+
 Security issues: not in the public tracker — missing_foss@etik.com.

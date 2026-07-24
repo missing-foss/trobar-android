@@ -94,3 +94,5 @@ Android refuses updates across a signature change.
 
 `GPL-3.0-or-later` — see [LICENSE](LICENSE). Contributions are welcome
 under the same license; see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Contributing a translation? See [Translating Trobar](https://missing-foss.github.io/trobar-server/project/translations/).

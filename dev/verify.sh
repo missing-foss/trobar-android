@@ -24,7 +24,14 @@ step "translations (EN/FR parity — MissingTranslation lint, #52)"
 ./gradlew lintDebug && echo ok || fail=1
 
 step "leak scan (household infra must never ship)"
-if git ls-files | xargs grep -InE -f dev/forbidden-terms.txt 2>/dev/null \
+# #404: `grep -f` on a missing terms file exits 2 (swallowed by 2>/dev/null
+# below), the `if` is then false, and this printed "ok" having scanned
+# nothing — fail-open, not fail-safe. `-s` catches missing AND empty in one
+# test, skipping the grep entirely so this doesn't ALSO scan (and pass)
+# against a pattern file with nothing in it.
+if [ ! -s dev/forbidden-terms.txt ]; then
+  echo "LEAK: dev/forbidden-terms.txt missing or empty — scan did not run"; fail=1
+elif git ls-files | xargs grep -InE -f dev/forbidden-terms.txt 2>/dev/null \
      | grep -viE "\.lock$|^dev/forbidden-terms\.txt:"; then
   echo "LEAK: forbidden term(s) above"; fail=1
 else

@@ -24,8 +24,8 @@ step "translations (EN/FR parity — MissingTranslation lint, #52)"
 ./gradlew lintDebug && echo ok || fail=1
 
 step "leak scan (household infra must never ship)"
-if git ls-files | xargs grep -InE "mphp|soundsync|renoir|192\.168\.50|/nfs/" 2>/dev/null \
-     | grep -viE "\.lock$|workflows/ci\.yml|dev/verify\.sh"; then
+if git ls-files | xargs grep -InE -f dev/forbidden-terms.txt 2>/dev/null \
+     | grep -viE "\.lock$|^dev/forbidden-terms\.txt:"; then
   echo "LEAK: forbidden term(s) above"; fail=1
 else
   echo "ok"

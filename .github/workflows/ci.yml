@@ -31,8 +31,8 @@ jobs:
         run: ./gradlew lintDebug
       - name: Leak scan (household infra must never ship)
         run: |
-          if git ls-files | xargs grep -InE "mphp|soundsync|renoir|192\.168\.50|/nfs/" \
-               | grep -viE "\.lock$|workflows/ci\.yml|dev/verify\.sh"; then
+          if git ls-files | xargs grep -InE -f dev/forbidden-terms.txt \
+               | grep -viE "\.lock$|^dev/forbidden-terms\.txt:"; then
             echo "::error::forbidden term(s) found above"; exit 1
           fi
       - name: Secret scan

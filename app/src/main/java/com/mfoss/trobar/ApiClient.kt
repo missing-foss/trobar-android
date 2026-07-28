@@ -33,6 +33,22 @@ data class DeviceInfo(val name: String, val maxSizeBytes: Long?, val deviceType:
  * library (marked downloaded) vs didn't recognize. */
 data class ManifestResult(val matched: Int, val unmatched: Int)
 
+/** #239/#81: one row from GET /api/device/fingerprints or one row to push
+ * via POST /api/device/provenance — same shape either direction. `path` is
+ * the same device_path() wire form as [TrackRef.relativePath];
+ * `fingerprint` is always the SOURCE audio's, even on a transcoding device
+ * holding an MP3 — don't try to verify it against the local file, it won't
+ * match, by design (see the server's provenance.py docstring). */
+data class FingerprintEntry(val trackId: Long, val fingerprint: String, val path: String)
+/** `nextAfter` null means the cursor walk is done; `pending` can still be
+ * > 0 on that last page — those tracks just don't have a server-computed
+ * fingerprint YET, not an error. */
+data class FingerprintPage(val entries: List<FingerprintEntry>, val nextAfter: Long?, val pending: Int)
+/** `pending` here is the server's own count of this device's still-
+ * unmatched pushed rows — matching happens in a background job, so this
+ * response is immediate and doesn't reflect it settling to 0. */
+data class ProvenancePushResult(val received: Int, val stored: Int, val pending: Int)
+
 /** Talks to the device-facing API ("/api/device" routes) — Bearer-token
  * auth, no ForwardAuth involved (that router is deliberately excluded from
  * Authentik in docker-compose.yaml on the server, since a native client
@@ -160,6 +176,48 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
         }
     }
 
+    /** #239/#81: one page of this device's server-computed fingerprints,
+     * cursor-paginated on ascending track_id — walk with `after =
+     * page.nextAfter` until it's null (see [syncProvenanceFingerprints]).
+     * `limit` is clamped to [FINGERPRINT_PAGE_MAX] server-side regardless
+     * of what's asked for here. */
+    fun getFingerprintsPage(after: Long, limit: Int = FINGERPRINT_PAGE_DEFAULT): FingerprintPage {
+        val url = "${baseUrl()}/api/device/fingerprints?after=$after&limit=$limit"
+        client.newCall(authed(url).build()).execute().use { resp ->
+            requireSuccess(resp, "fingerprints")
+            val body = JSONObject(resp.body?.string() ?: "{}")
+            val entries = mutableListOf<FingerprintEntry>()
+            body.optJSONArray("entries")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    entries.add(FingerprintEntry(o.getLong("track_id"), o.getString("fingerprint"), o.getString("path")))
+                }
+            }
+            val nextAfter = if (body.isNull("next_after")) null else body.optLong("next_after")
+            return FingerprintPage(entries, nextAfter, body.optInt("pending"))
+        }
+    }
+
+    /** #239 PR2/#85: push this device's locally-held provenance back to
+     * the server for recovery matching. At most [PROVENANCE_PUSH_MAX]
+     * entries per call — more is a 400, not a truncation (server-
+     * enforced, all-or-nothing per page); paging is the caller's job (see
+     * [pushPendingProvenance]), this just sends what it's given. */
+    fun pushProvenance(entries: List<FingerprintEntry>): ProvenancePushResult {
+        val arr = JSONArray()
+        for (e in entries) {
+            arr.put(JSONObject().put("track_id", e.trackId).put("fingerprint", e.fingerprint).put("path", e.path))
+        }
+        val json = JSONObject().put("entries", arr)
+        val body = json.toString().toRequestBody("application/json".toMediaType())
+        val req = authed("${baseUrl()}/api/device/provenance").post(body).build()
+        client.newCall(req).execute().use { resp ->
+            requireSuccess(resp, "provenance")
+            val obj = JSONObject(resp.body?.string() ?: "{}")
+            return ProvenancePushResult(obj.optInt("received"), obj.optInt("stored"), obj.optInt("pending"))
+        }
+    }
+
     /** Reports the user's (or a standing preference's) decision
      * about tracks the server believed were already downloaded but were
      * found missing on disk: `redownload` flips them back to pending,
@@ -235,10 +293,15 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
         }
     }
 
-    private companion object {
-        const val CONNECT_TIMEOUT_SECONDS = 15L
-        const val READ_TIMEOUT_SECONDS = 60L
-        const val HTTP_UNAUTHORIZED = 401
+    companion object {
+        private const val CONNECT_TIMEOUT_SECONDS = 15L
+        private const val READ_TIMEOUT_SECONDS = 60L
+        private const val HTTP_UNAUTHORIZED = 401
+        private const val FINGERPRINT_PAGE_DEFAULT = 200
+        // #239/#85: matches the server's own _PROVENANCE_PUSH_MAX
+        // (main.py) — sending more than this in one POST is a 400, not a
+        // truncation, so pushPendingProvenance pages at exactly this cap.
+        const val PROVENANCE_PUSH_MAX = 500
     }
 }
 

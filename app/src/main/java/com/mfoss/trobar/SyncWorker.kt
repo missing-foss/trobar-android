@@ -90,6 +90,17 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             try { api.reportStorage(stats.freeBytes, stats.totalBytes) } catch (ignored: Exception) { /* best-effort, not fatal */ }
         }
 
+        // #239/#81/#85: keep the local provenance DB current, then replay
+        // anything not yet acknowledged — both best-effort, run regardless
+        // of whether the file sync above succeeded (independent of it; a
+        // SAF write failure shouldn't also block fingerprint bookkeeping).
+        ProvenanceStore(applicationContext).use { store ->
+            try {
+                syncProvenanceFingerprints(api, store)
+                pushPendingProvenance(api, store)
+            } catch (ignored: Exception) { /* best-effort — try again next sync */ }
+        }
+
         val currentLocale = AppCompatDelegate.getApplicationLocales().get(0) ?: Locale.getDefault()
         val timestamp = SimpleDateFormat("dd/MM HH:mm", currentLocale).format(Date())
         Prefs.recordSyncResult(applicationContext, timestamp, result.error)

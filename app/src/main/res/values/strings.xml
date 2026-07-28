@@ -33,6 +33,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="folder_picker_title">Sync folder</string>
     <string name="folder_picker_subtitle">This is where your tracks will be downloaded.</string>
     <string name="choose_folder_button">Choose a folder</string>
+    <!-- #87: the recovery-manifest walk already avoids re-downloading
+         anything already present in the chosen folder (see SyncEngine's
+         recoverIfPending), on every fresh enrollment, not just a
+         same-phone reinstall. This just makes that discoverable. -->
+    <string name="folder_picker_recovery_hint">Already have this music on another device? Copy it into the folder you pick here before your first sync — Trobar will recognise it and skip re-downloading it.</string>
 
     <string name="sync_failure">Failed: %1$s</string>
     <plurals name="sync_downloaded">

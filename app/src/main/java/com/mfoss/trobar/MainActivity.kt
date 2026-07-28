@@ -369,6 +369,18 @@ fun FolderPickerScreen(onPicked: (android.net.Uri) -> Unit) {
                 onClick = { launcher.launch(null) },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.choose_folder_button)) }
+            // #87: the recovery-manifest walk (SyncEngine.recoverIfPending)
+            // already avoids re-downloading anything already present in
+            // whatever folder gets picked here — it fires on every fresh
+            // enrollment, not just a same-phone reinstall. That mechanism
+            // predates this hint; the hint is the only thing that was
+            // actually missing.
+            Text(
+                stringResource(R.string.folder_picker_recovery_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }

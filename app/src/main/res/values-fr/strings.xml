@@ -32,6 +32,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
     <string name="folder_picker_title">Dossier de synchronisation</string>
     <string name="folder_picker_subtitle">C\'est là que tes morceaux seront téléchargés.</string>
+    <string name="folder_picker_recovery_hint">Tu as déjà cette musique sur un autre appareil ? Copie-la dans le dossier que tu choisis ici avant ta première synchronisation — Trobar la reconnaîtra et évitera de la retélécharger.</string>
     <string name="choose_folder_button">Choisir un dossier</string>
 
     <string name="sync_failure">Échec : %1$s</string>

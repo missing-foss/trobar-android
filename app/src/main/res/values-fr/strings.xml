@@ -31,8 +31,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="clear_error_button">Effacer</string>
 
     <string name="folder_picker_title">Dossier de synchronisation</string>
-    <string name="folder_picker_subtitle">C\'est là que tes morceaux seront téléchargés.</string>
-    <string name="folder_picker_recovery_hint">Tu as déjà cette musique sur un autre appareil ? Copie-la dans le dossier que tu choisis ici avant ta première synchronisation — Trobar la reconnaîtra et évitera de la retélécharger.</string>
+    <string name="folder_picker_subtitle">C\'est là que vos morceaux seront téléchargés.</string>
+    <string name="folder_picker_recovery_hint">Cette musique se trouve déjà sur un autre appareil ? Copiez-la dans le dossier choisi ici avant la première synchronisation — Trobar la reconnaîtra et évitera de la retélécharger.</string>
     <string name="choose_folder_button">Choisir un dossier</string>
 
     <string name="sync_failure">Échec : %1$s</string>
@@ -51,7 +51,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
     <string name="settings_title">Réglages</string>
     <string name="sync_in_progress">Synchronisation en cours…</string>
-    <string name="recovery_scanning">Analyse de ta bibliothèque…</string>
+    <string name="recovery_scanning">Analyse de votre bibliothèque…</string>
     <plurals name="recovery_files_scanned">
         <item quantity="one">%1$d fichier trouvé</item>
         <item quantity="other">%1$d fichiers trouvés</item>

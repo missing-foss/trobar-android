@@ -16,8 +16,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
     <!-- Enrollment wizard (#34) -->
     <string name="enroll_title">Inscrire cet appareil</string>
-    <string name="enroll_subtitle">Scanne le QR code dans Trobar ou\nsaisis l\'URL du serveur et le code ci-dessous.</string>
-    <string name="enroll_or_manual">ou saisis-le manuellement</string>
+    <string name="enroll_subtitle">Scannez le QR code dans Trobar ou\nsaisissez l\'URL du serveur et le code ci-dessous.</string>
+    <string name="enroll_or_manual">ou saisissez-le manuellement</string>
     <string name="enroll_code_label">Code d\'inscription</string>
     <string name="enroll_continue">Continuer</string>
     <string name="device_name_label">Nom de l\'appareil</string>
@@ -135,7 +135,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="api_error_generic">%1$s — erreur HTTP %2$d</string>
     <string name="api_error_file">file/%1$d — erreur HTTP %2$d</string>
 
-    <string name="sync_folder_not_found">Dossier de synchro introuvable — choisis-le à nouveau.</string>
+    <string name="sync_folder_not_found">Dossier de synchro introuvable — choisissez-le à nouveau.</string>
     <string name="cannot_reach_server">Impossible de contacter le serveur : %1$s</string>
     <string name="file_creation_failed">création du fichier impossible</string>
     <string name="empty_response">réponse vide</string>

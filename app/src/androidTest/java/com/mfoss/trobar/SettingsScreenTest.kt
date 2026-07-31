@@ -53,11 +53,12 @@ class SettingsScreenTest {
                 """{"name": "Test Phone", "max_size_bytes": null, "device_type": "phone", "source_of_truth": "server"}""",
             ),
         )
-        // Reset the two DataStore prefs this test touches, so a prior run's
+        // Reset the DataStore prefs this test touches, so a prior run's
         // leftover state can't make this one flaky either way.
         runBlocking {
             Prefs.setMissingFileBehavior(context, Prefs.MISSING_ASK)
             Prefs.setUseDynamicColor(context, false)
+            Prefs.setRequireChargingAndIdle(context, false)
         }
     }
 
@@ -126,5 +127,20 @@ class SettingsScreenTest {
             runBlocking { Prefs.useDynamicColor(context).first() }
         }
         assertTrue(runBlocking { Prefs.useDynamicColor(context).first() })
+    }
+
+    @Test
+    fun chargingAndIdleTogglePersistsToRealPrefs() {
+        // #93: unlike the network-mode row above it, this one isn't
+        // telephony-gated -- always present regardless of device type.
+        setScreen()
+        assertEquals(false, runBlocking { Prefs.requireChargingAndIdle(context).first() })
+
+        compose.onNodeWithTag("charging_idle_switch").performScrollTo().performClick()
+
+        compose.waitUntil(timeoutMillis = 5_000) {
+            runBlocking { Prefs.requireChargingAndIdle(context).first() }
+        }
+        assertTrue(runBlocking { Prefs.requireChargingAndIdle(context).first() })
     }
 }

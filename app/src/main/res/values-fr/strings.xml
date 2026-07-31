@@ -118,11 +118,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="missing_tracks_resync_button">Retélécharger</string>
     <string name="missing_tracks_exclude_button">Marquer comme supprimé</string>
 
-    <string name="section_network">RÉSEAU</string>
+    <string name="section_sync_conditions">QUAND SYNCHRONISER</string>
     <string name="auto_sync_via_label">Synchronisation automatique</string>
     <string name="network_wifi">Wi-Fi uniquement</string>
     <string name="network_wifi_and_mobile">Wi-Fi + données mobiles</string>
     <string name="network_roaming">Wi-Fi + mobile + itinérance</string>
+    <string name="charging_idle_label">Seulement en charge et au repos</string>
+    <string name="charging_idle_description">Attend, pour la synchronisation automatique, que l\'appareil soit en charge et ne soit pas utilisé. Désactivé par défaut — l\'activer peut retarder une synchronisation au-delà de l\'intervalle habituel de 6 heures. La synchronisation manuelle ignore toujours ce réglage.</string>
 
     <string name="section_appearance">APPARENCE</string>
     <string name="dynamic_color_label">Couleurs dynamiques</string>

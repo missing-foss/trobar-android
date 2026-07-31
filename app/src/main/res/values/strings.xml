@@ -122,11 +122,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="missing_tracks_resync_button">Re-download</string>
     <string name="missing_tracks_exclude_button">Mark as deleted</string>
 
-    <string name="section_network">NETWORK</string>
+    <string name="section_sync_conditions">WHEN TO SYNC</string>
     <string name="auto_sync_via_label">Auto-sync</string>
     <string name="network_wifi">Wi-Fi only</string>
     <string name="network_wifi_and_mobile">Wi-Fi + mobile data</string>
     <string name="network_roaming">Wi-Fi + mobile + roaming</string>
+    <string name="charging_idle_label">Only while charging and idle</string>
+    <string name="charging_idle_description">Waits for the automatic sync until the device is on the charger and not in use. Off by default — turning this on can push a sync later than the usual 6-hour interval. Manual "sync now" always ignores this.</string>
 
     <string name="section_appearance">APPEARANCE</string>
     <string name="dynamic_color_label">Dynamic colors</string>

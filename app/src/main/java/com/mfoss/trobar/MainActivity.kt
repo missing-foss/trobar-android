@@ -49,6 +49,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.FolderOpen
@@ -859,6 +860,7 @@ fun SettingsScreen(
     var showLimitDialog by remember { mutableStateOf(false) }
     var showNomediaWarning by remember { mutableStateOf(false) }
     val networkMode by Prefs.networkMode(context).collectAsState(initial = Prefs.NETWORK_WIFI_ONLY)
+    val requireChargingAndIdle by Prefs.requireChargingAndIdle(context).collectAsState(initial = false)
     val useDynamicColor by Prefs.useDynamicColor(context).collectAsState(initial = false)
     val nomediaEnabled by Prefs.nomediaEnabled(context).collectAsState(initial = false)
     val missingFileBehavior by Prefs.missingFileBehavior(context).collectAsState(initial = Prefs.MISSING_ASK)
@@ -1131,10 +1133,13 @@ fun SettingsScreen(
                 )
             }
 
-            // Network section — only shown on devices with a cellular radio
-            if (hasTelephony) {
-                SectionLabel(stringResource(R.string.section_network))
-                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            // #93: "when to sync" section — the network-mode row is telephony-
+            // gated same as before (a Wi-Fi-only DAP has no mobile-data choice
+            // to make), but the charging/idle toggle applies to every device,
+            // so the section itself (and its card) is no longer gated at all.
+            SectionLabel(stringResource(R.string.section_sync_conditions))
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                if (hasTelephony) {
                     ChoiceRow(
                         icon = Icons.Filled.Wifi,
                         label = stringResource(R.string.auto_sync_via_label),
@@ -1148,7 +1153,21 @@ fun SettingsScreen(
                             scope.launch { Prefs.setNetworkMode(context, value); SyncWorker.schedulePeriodic(context) }
                         },
                     )
+                    HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
                 }
+                SwitchRow(
+                    icon = Icons.Filled.BatteryChargingFull,
+                    label = stringResource(R.string.charging_idle_label),
+                    description = stringResource(R.string.charging_idle_description),
+                    checked = requireChargingAndIdle,
+                    onCheckedChange = { required ->
+                        scope.launch {
+                            Prefs.setRequireChargingAndIdle(context, required)
+                            SyncWorker.schedulePeriodic(context)
+                        }
+                    },
+                    modifier = Modifier.testTag("charging_idle_switch"),
+                )
             }
 
             // Apparence section — language switcher always shown; dynamic

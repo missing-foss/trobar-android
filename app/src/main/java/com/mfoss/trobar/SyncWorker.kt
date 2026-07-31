@@ -176,13 +176,23 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             else -> NetworkType.UNMETERED
         }
 
-        /** Re-enqueues with UPDATE so changing the network setting in
-         * Settings actually takes effect on the existing periodic work,
-         * not just on a fresh pairing (KEEP would silently ignore it). */
+        /** Re-enqueues with UPDATE so changing the network (or #93's
+         * charging/idle) setting in Settings actually takes effect on the
+         * existing periodic work, not just on a fresh pairing (KEEP would
+         * silently ignore it). */
         suspend fun schedulePeriodic(context: Context) {
             val mode = Prefs.networkMode(context).firstOrNull() ?: Prefs.NETWORK_WIFI_ONLY
+            val requireChargingAndIdle = Prefs.requireChargingAndIdle(context).firstOrNull() ?: false
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(networkTypeFor(mode))
+                // #93: both gated on the same opt-in preference, never
+                // independently — the issue's own settled design treats
+                // "charging + idle" as one "convenient" condition, not two.
+                // Both are enforced by the OS itself (WorkManager/JobScheduler);
+                // this job simply doesn't run until they hold, at no battery
+                // cost from polling.
+                .setRequiresCharging(requireChargingAndIdle)
+                .setRequiresDeviceIdle(requireChargingAndIdle)
                 .build()
             val request = PeriodicWorkRequestBuilder<SyncWorker>(PERIODIC_INTERVAL_HOURS, TimeUnit.HOURS)
                 .setConstraints(constraints)

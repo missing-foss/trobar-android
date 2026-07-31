@@ -25,6 +25,7 @@ object Prefs {
     private val LAST_SYNC_AT = stringPreferencesKey("last_sync_at")
     private val LAST_SYNC_ERROR = stringPreferencesKey("last_sync_error")
     private val NETWORK_MODE = stringPreferencesKey("network_mode")
+    private val REQUIRE_CHARGING_AND_IDLE = booleanPreferencesKey("require_charging_and_idle")
     private val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
     private val NOMEDIA = booleanPreferencesKey("nomedia")
     private val MISSING_FILE_BEHAVIOR = stringPreferencesKey("missing_file_behavior")
@@ -137,6 +138,19 @@ object Prefs {
 
     suspend fun setNetworkMode(context: Context, mode: String) {
         context.dataStore.edit { it[NETWORK_MODE] = mode }
+    }
+
+    /** #93: opt-in WorkManager constraints on the PERIODIC sync only —
+     * SyncWorker.triggerManualSync() deliberately never reads this, since an
+     * explicit "sync now" tap means now, not "whenever the phone happens to
+     * be idle on the charger". Off by default: requiring both can push the
+     * periodic sync well past its usual 6-hour interval, which is the
+     * user's opt-in tradeoff to make, not a surprise default. */
+    fun requireChargingAndIdle(context: Context): Flow<Boolean> =
+        context.dataStore.data.map { it[REQUIRE_CHARGING_AND_IDLE] ?: false }
+
+    suspend fun setRequireChargingAndIdle(context: Context, required: Boolean) {
+        context.dataStore.edit { it[REQUIRE_CHARGING_AND_IDLE] = required }
     }
 
     fun useDynamicColor(context: Context): Flow<Boolean> =

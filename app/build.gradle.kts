@@ -123,7 +123,7 @@ dependencies {
     // a device/emulator). ui-test-manifest lets the harness host composables.
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.06.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     // Same version as the app's own OkHttp dep (line 112) — a real local HTTP
     // server standing in for trobar-server, so EnrollmentWizard/SettingsScreen/

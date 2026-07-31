@@ -25,6 +25,8 @@ jobs:
           java-version: "17"
       - name: Build debug APK
         run: ./gradlew assembleDebug
+      - name: Compile instrumented tests (#96 — catches an androidTest dependency bump, no emulator needed)
+        run: ./gradlew assembleDebugAndroidTest
       - name: Static analysis (detekt)
         run: ./gradlew detekt
       - name: Translations (EN/FR parity — MissingTranslation lint, #52)

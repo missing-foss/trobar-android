@@ -11,6 +11,7 @@ package com.mfoss.trobar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import okhttp3.mockwebserver.MockResponse
@@ -50,6 +51,22 @@ class StatusScreenConnectionTest {
         }
     }
 
+    /** StatusScreen's on-open probe runs inside a LaunchedEffect that hops
+     * onto Dispatchers.IO for the real network call (see MainActivity.kt) —
+     * invisible to Compose's own test-idling, which only tracks
+     * recomposition/the main dispatcher. Asserting right after setScreen()
+     * races that IO call: it reliably wins on a warm, already-running
+     * emulator (which is all this suite ran on before #79), but a freshly
+     * booted CI emulator is slower and can lose it — measured directly,
+     * `#79`'s first real CI run failed both these assertions. Wait for the
+     * probe's own outcome first, same convention as EnrollmentWizardTest /
+     * SettingsScreenTest already use for their real network round-trips. */
+    private fun waitForText(text: String) {
+        compose.waitUntil(timeoutMillis = 5_000) {
+            compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
     @Test
     fun okResponseShowsDeviceNameAndSyncPrompt() {
         server.enqueue(
@@ -59,6 +76,7 @@ class StatusScreenConnectionTest {
         )
         setScreen()
 
+        waitForText("Test Phone")
         compose.onNodeWithText("Test Phone").assertIsDisplayed()
         compose.onNodeWithText("Tap the logo to sync").assertIsDisplayed()
     }
@@ -68,6 +86,7 @@ class StatusScreenConnectionTest {
         server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error": "invalid token"}"""))
         setScreen()
 
+        waitForText("Device not recognized")
         compose.onNodeWithText("Device not recognized").assertIsDisplayed()
         compose.onNodeWithText("Re-enroll").assertIsDisplayed()
     }
@@ -79,6 +98,11 @@ class StatusScreenConnectionTest {
         server.shutdown()
         setScreen()
 
+        // Passed even before the waitForText fix above (a refused connection
+        // resolves faster than a real round-trip), but the same race exists
+        // in principle — guarding it too rather than leaving one of three
+        // tests in this file on a different, unproven footing.
+        waitForText("Can't reach the server")
         compose.onNodeWithText("Can't reach the server").assertIsDisplayed()
         compose.onNodeWithText("Retry").assertIsDisplayed()
     }

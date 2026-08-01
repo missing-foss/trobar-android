@@ -52,3 +52,145 @@ jobs:
         # via pipx (preinstalled on the runner). The charset-normalizer extra
         # supplies reuse's encoding detection without needing libmagic.
         run: pipx run --spec 'reuse[charset-normalizer]' reuse lint
+
+  # #79: runs the androidTest suite (this repo's only test source set — see
+  # #99) on a real emulator. #96/#97 got CI as far as compiling it; nothing
+  # executed it, so a regression in e.g. TokenCrypto's round-trip or
+  # SyncEngine's path walk still passed a green PR. This closes that gap.
+  #
+  # Deliberately its own job/check name, NOT folded into `build` above, and
+  # NOT added to protect-main's required_status_checks (currently just
+  # `build` + `require-label`): an emulator flake must not block an
+  # unrelated merge before this has proven stable over a few PRs. Flip it to
+  # required by hand once it has (see #79's own phasing note).
+  #
+  # No `uses: reactivecircus/android-emulator-runner` — same org Actions
+  # policy (GitHub-owned + verified-creator only) that made the `build` job
+  # above fetch gitleaks as a plain binary and run REUSE via pipx. Every
+  # step here is either a GitHub-owned action already used above/actions/cache,
+  # or a plain `run:` driving the Android SDK's own command-line tools —
+  # `sdkmanager`/`avdmanager`/`emulator` are all preinstalled on the hosted
+  # runner image (Ubuntu's Android Command Line Tools), just not the
+  # emulator package or a system image, which is what this job fetches.
+  instrumented-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Pin the AVD root
+        # This job's own first runs measured avdmanager silently writing a
+        # new AVD under ~/.config/.android/avd (confirmed via `find ~
+        # -iname ci_test*`) while `emulator` looks in ~/.android/avd by
+        # default and reports "Unknown AVD name" — this cmdline-tools
+        # version (12.0 on the hosted image) apparently defaults its prefs
+        # root to $XDG_CONFIG_HOME/.android rather than the traditional
+        # $HOME/.android, and neither ANDROID_AVD_HOME nor ANDROID_SDK_HOME
+        # was set to pin it otherwise. Setting ANDROID_AVD_HOME explicitly
+        # (first in avdmanager's/emulator's own documented search order:
+        # $ANDROID_AVD_HOME, $ANDROID_SDK_HOME/avd, $HOME/.android/avd)
+        # makes every later step — create, cache, boot — agree on the same
+        # directory regardless of this version's own default.
+        #
+        # mkdir explicitly: pinning ANDROID_AVD_HOME to a path that doesn't
+        # exist yet on a fresh runner produced the exact same silent no-op
+        # (exit 0, nothing written, no error) as the original bug this step
+        # fixes — avdmanager's own internal default path apparently
+        # bootstraps its directory tree the first time, but doesn't when
+        # the location instead comes from this env var.
+        run: |
+          mkdir -p "$HOME/.android/avd"
+          echo "ANDROID_AVD_HOME=$HOME/.android/avd" >> "$GITHUB_ENV"
+      - name: Enable KVM (hardware-accelerated emulation on the hosted runner)
+        # Standard udev-rule grant for /dev/kvm — hosted ubuntu-latest runners
+        # have nested virtualization enabled but the default node permissions
+        # don't let the runner user touch it. Without this the emulator falls
+        # back to pure software emulation, which is slow enough to blow the
+        # job's timeout rather than just being somewhat slower.
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -la /dev/kvm
+      - name: Cache the emulator package, system image, and created AVD
+        # #79's own caveat: cache the AVD/snapshot to keep boot time
+        # reasonable. Static key (not hashFiles(ci.yml)) deliberately — an
+        # unrelated edit to this file shouldn't cost the next PR a cold
+        # ~1GB re-download; bump the "v1" by hand if the AVD definition
+        # below ever changes. First-writer-wins (actions/cache never
+        # overwrites an existing key), so the "quit the emulator cleanly"
+        # step below matters: it's what lets that first run's boot snapshot
+        # actually land in the cache for every run after it to reuse.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # Hardcoded, not ${{ env.ANDROID_HOME }}: that's a shell env var
+          # baked into the runner image, not something the workflow's own
+          # `env:` context (used to resolve `${{ }}` expressions) sees —
+          # it would silently resolve empty here. Confirmed against
+          # actions/runner-images' Ubuntu 24.04 readme.
+          path: |
+            ~/.android/avd
+            /usr/local/lib/android/sdk/emulator
+            /usr/local/lib/android/sdk/system-images
+          key: android-avd-api34-x86_64-v1
+      - name: Install the emulator package + API 34 x86_64 system image
+        # Idempotent regardless of the cache step's hit/miss: a cache hit
+        # means these already exist and sdkmanager no-ops; a miss (or a
+        # partially-evicted cache) means it fetches what's missing.
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "emulator" "system-images;android-34;default;x86_64"
+      - name: Create the AVD
+        # Same API level + device profile as the local `trobar_test` AVD
+        # developers run this suite against manually. `yes "no" |` (not a
+        # single `echo no |`) in case create prompts more than once for the
+        # "custom hardware profile?" question; the assertion after the `if`
+        # is deliberate, not belt-and-suspenders — a non-zero exit *inside*
+        # `if`/`then` is exit-status material the `if` consumes, so
+        # `bash -e` does NOT fail the step on it, and a missing AVD here
+        # otherwise only surfaces as "Unknown AVD name" when `emulator`
+        # starts, then a wait for a device that will never appear.
+        run: |
+          if [ ! -f "$ANDROID_AVD_HOME/ci_test.ini" ]; then
+            yes "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force \
+              -n ci_test -k "system-images;android-34;default;x86_64" -d pixel_6
+          fi
+          test -f "$ANDROID_AVD_HOME/ci_test.ini" || { echo "::error::AVD ci_test was not created"; exit 1; }
+      - name: Boot the emulator (headless)
+        run: |
+          "$ANDROID_HOME/emulator/emulator" -avd ci_test -no-window -no-audio -no-boot-anim \
+            -gpu swiftshader_indirect -camera-back none &
+          echo $! > emulator.pid
+          # Fail fast (not the 30-minute job timeout) if the emulator process
+          # itself has already died — e.g. a bad AVD/flag — rather than
+          # leaving `adb wait-for-device` below to hang indefinitely against
+          # a device that will never appear (exactly what happened on the
+          # first run of this job, root-caused above).
+          sleep 5
+          kill -0 "$(cat emulator.pid)" || { echo "::error::emulator process exited immediately, see the log above"; exit 1; }
+          timeout 60 "$ANDROID_HOME/platform-tools/adb" wait-for-device
+          # boot_completed can read true before the system is actually ready
+          # to accept the instrumentation package, so poll rather than trust
+          # the first true.
+          timeout 180 bash -c '
+            until [ "$("$ANDROID_HOME/platform-tools/adb" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do
+              sleep 2
+            done'
+      - name: Run instrumented tests
+        run: ./gradlew connectedDebugAndroidTest
+      - name: Upload instrumented test results (debugging a failure/flake)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: androidTest-results
+          path: app/build/outputs/androidTest-results/connected
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Quit the emulator cleanly (lets it save a boot snapshot for the cache above)
+        if: always()
+        run: $ANDROID_HOME/platform-tools/adb emu kill || true

@@ -63,9 +63,10 @@ class PrefsTest {
                 it[TOKEN_KEY] = "legacy-plaintext-token"
             }
 
-            val pairing = Prefs.pairing(context).first()
+            val state = Prefs.pairing(context).first()
 
-            assertEquals("legacy-plaintext-token", pairing?.token)
+            assertTrue(state is Prefs.PairingState.Paired)
+            assertEquals("legacy-plaintext-token", (state as Prefs.PairingState.Paired).pairing.token)
         }
     }
 
@@ -79,7 +80,8 @@ class PrefsTest {
 
             val afterMigration = context.dataStore.data.first()[TOKEN_KEY]
             assertEquals(beforeMigration, afterMigration)
-            assertEquals("already-set-token", Prefs.pairing(context).first()?.token)
+            val state = Prefs.pairing(context).first()
+            assertEquals("already-set-token", (state as Prefs.PairingState.Paired).pairing.token)
         }
     }
 
@@ -88,6 +90,45 @@ class PrefsTest {
         runBlocking {
             Prefs.migrateTokenIfNeeded(context) // must not throw with nothing paired
             assertEquals(null, context.dataStore.data.first()[TOKEN_KEY])
+        }
+    }
+
+    // #101: pairing() must tell "never paired" apart from "paired, but the
+    // token can't be decrypted" — before the fix both collapsed into a bare
+    // null, which is what made a decrypt failure indistinguishable from a
+    // clean slate.
+    @Test
+    fun pairingWithNothingStoredIsNotPaired() {
+        runBlocking {
+            assertEquals(Prefs.PairingState.NotPaired, Prefs.pairing(context).first())
+        }
+    }
+
+    @Test
+    fun pairingWithAnUndecryptableTokenReportsTokenUnreadableWithTheStoredUrl() {
+        runBlocking {
+            // A real, valid pairing, then corrupt only the stored ciphertext
+            // (still v1:-prefixed, so isEncrypted() is true) so decrypt()
+            // genuinely fails without needing to touch the Keystore itself.
+            Prefs.setPairing(context, "https://example.test", "some-token")
+            context.dataStore.edit { it[TOKEN_KEY] = TokenCrypto.PREFIX + "not-valid-base64!!!" }
+
+            val state = Prefs.pairing(context).first()
+
+            assertTrue(state is Prefs.PairingState.TokenUnreadable)
+            assertEquals("https://example.test", (state as Prefs.PairingState.TokenUnreadable).serverUrl)
+        }
+    }
+
+    @Test
+    fun pairingWithValidCredentialsIsPaired() {
+        runBlocking {
+            Prefs.setPairing(context, "https://example.test", "real-token")
+
+            val state = Prefs.pairing(context).first()
+
+            assertTrue(state is Prefs.PairingState.Paired)
+            assertEquals("real-token", (state as Prefs.PairingState.Paired).pairing.token)
         }
     }
 }

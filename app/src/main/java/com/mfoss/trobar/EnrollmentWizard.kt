@@ -50,8 +50,11 @@ import org.json.JSONObject
  * download folder is picked in the step that follows (client-local, never sent
  * to the server), so it isn't collected here. */
 @Composable
-fun EnrollmentWizard(onEnrolled: (String, String) -> Unit) {
-    var serverUrl by remember { mutableStateOf("") }
+fun EnrollmentWizard(onEnrolled: (String, String) -> Unit, initialServerUrl: String = "") {
+    // #101: re-pairing after a credentials-unreadable failure offers the
+    // still-known server URL back, so it's one QR/code away rather than a
+    // fully blank form — the URL itself was never the part that failed.
+    var serverUrl by remember { mutableStateOf(initialServerUrl) }
     var code by remember { mutableStateOf("") }
     var showDetails by remember { mutableStateOf(false) }
     var enrolling by remember { mutableStateOf(false) }

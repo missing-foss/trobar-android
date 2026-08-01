@@ -46,16 +46,34 @@ object Prefs {
 
     data class Pairing(val serverUrl: String, val token: String)
 
-    fun pairing(context: Context): Flow<Pairing?> =
+    /** #101: a stored pairing whose token can't be decrypted is a materially
+     * different situation from never having paired at all — both used to
+     * collapse into a bare `null`, which is exactly why the bug looked like
+     * silent data loss with no way to tell the two apart from the outside. */
+    sealed class PairingState {
+        object NotPaired : PairingState()
+
+        /** The URL is still readable (plaintext, never encrypted) even
+         * though the token isn't — kept so re-pairing can offer it back to
+         * the user instead of a blank form. */
+        data class TokenUnreadable(val serverUrl: String) : PairingState()
+        data class Paired(val pairing: Pairing) : PairingState()
+    }
+
+    fun pairing(context: Context): Flow<PairingState> =
         context.dataStore.data.map { prefs ->
             val url = prefs[SERVER_URL]
-            // Token is Keystore-encrypted at rest; decrypt transparently.
-            // A legacy plaintext token (no PREFIX) is returned as-is so
-            // existing pairings keep working until migrateTokenIfNeeded() upgrades
-            // them. A decrypt failure (lost key) yields null → treated as unpaired.
             val stored = prefs[TOKEN]
-            val token = stored?.let { if (TokenCrypto.isEncrypted(it)) TokenCrypto.decrypt(it) else it }
-            if (url != null && token != null) Pairing(url, token) else null
+            if (url == null || stored == null) {
+                PairingState.NotPaired
+            } else {
+                // Token is Keystore-encrypted at rest; decrypt transparently.
+                // A legacy plaintext token (no PREFIX) is returned as-is so
+                // existing pairings keep working until migrateTokenIfNeeded()
+                // upgrades them.
+                val token = if (TokenCrypto.isEncrypted(stored)) TokenCrypto.decrypt(stored) else stored
+                if (token != null) PairingState.Paired(Pairing(url, token)) else PairingState.TokenUnreadable(url)
+            }
         }
 
     suspend fun setPairing(context: Context, serverUrl: String, token: String) {

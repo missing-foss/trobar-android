@@ -142,32 +142,33 @@ jobs:
         # hanging for the full 30-minute job timeout instead of failing fast.
         run: |
           AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
+          # Attempt 4's -d run reproduced the exact same silent no-op as
+          # attempts 1-3 (exit 0, "Auto-selecting single ABI x86_64" then
+          # immediate "Broken pipe", nothing written) while the no-`-d`
+          # fallback DID prompt (and floods on "no" not being a valid reply
+          # to whatever it actually asks there — a worse failure mode, not a
+          # better one, so `-d pixel_6` stays). Device id is confirmed valid
+          # (28/"pixel_6"). Stop guessing at the invocation and dump the
+          # actual environment + avdmanager's own usage text instead — the
+          # "search order" note in emulator's earlier error
+          # ($ANDROID_AVD_HOME, $ANDROID_SDK_HOME/avd, $HOME/.android/avd)
+          # applies to *writing* a new AVD too, so if either of the first two
+          # is unexpectedly set here, create could be silently succeeding
+          # against a different directory than the one this step checks.
+          echo "-- ANDROID_* environment --"
+          env | grep -i android | sort
+          echo "-- avdmanager create avd --help --"
+          "$AVDMANAGER" create avd --help 2>&1 || true
           if [ ! -f ~/.android/avd/ci_test.ini ]; then
-            echo "-- valid device ids matching 'pixel' (sanity-checking -d below) --"
-            "$AVDMANAGER" list device 2>&1 | grep -i pixel || echo "(no pixel device ids found at all)"
-
-            # `yes "no" |` (unlimited answers, in case of more than one
-            # prompt) still produced NO output past "Auto-selecting single
-            # ABI x86_64", no error, exit code 0, and no ~/.android/avd/
-            # directory whatsoever on this job's third run — ruling out an
-            # EOF-on-a-later-prompt theory. Retrying without `-d` isolates
-            # whether `pixel_6` is actually a valid device id in this
-            # cmdline-tools version (12.0 on the hosted image) or the
-            # silent no-op has some other cause.
-            echo "-- attempt 1: with -d pixel_6 --"
+            echo "-- attempt: with -d pixel_6 --"
             yes "no" | "$AVDMANAGER" create avd --force \
               -n ci_test -k "system-images;android-34;default;x86_64" -d pixel_6 2>&1
             echo "exit code: $?"
-
-            if [ ! -f ~/.android/avd/ci_test.ini ]; then
-              echo "-- attempt 2: no device profile at all --"
-              yes "no" | "$AVDMANAGER" create avd --force \
-                -n ci_test -k "system-images;android-34;default;x86_64" 2>&1
-              echo "exit code: $?"
-            fi
           fi
           echo "-- ~/.android/avd/ contents --"
           ls -la ~/.android/avd/ 2>&1 || echo "(no ~/.android/avd/ directory at all)"
+          echo "-- find any ci_test* file anywhere under \$HOME --"
+          find ~ -iname "ci_test*" 2>/dev/null
           test -f ~/.android/avd/ci_test.ini || { echo "::error::AVD ci_test was not created"; exit 1; }
       - name: Boot the emulator (headless)
         run: |

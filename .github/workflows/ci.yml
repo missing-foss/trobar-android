@@ -142,9 +142,19 @@ jobs:
         # hanging for the full 30-minute job timeout instead of failing fast.
         run: |
           if [ ! -f ~/.android/avd/ci_test.ini ]; then
-            echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force \
+            # `echo no |` (a single answer) reliably produced NO output past
+            # "Auto-selecting single ABI x86_64" and no AVD on this job's
+            # second run — avdmanager apparently prompts more than once, and
+            # hitting EOF on a later prompt aborts silently rather than
+            # accepting a default. `yes "no" |` supplies an answer for as
+            # many prompts as it takes; avdmanager exiting closes its end of
+            # the pipe and `yes` gets SIGPIPE, same as the benign "Broken
+            # pipe" already seen from the `sdkmanager --licenses` step above.
+            yes "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force \
               -n ci_test -k "system-images;android-34;default;x86_64" -d pixel_6
+            echo "avdmanager exit code: $?"
           fi
+          ls -la ~/.android/avd/ 2>&1 || echo "(no ~/.android/avd/ directory at all)"
           test -f ~/.android/avd/ci_test.ini || { echo "::error::AVD ci_test was not created"; exit 1; }
       - name: Boot the emulator (headless)
         run: |

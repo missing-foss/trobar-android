@@ -125,16 +125,40 @@ jobs:
       - name: Create the AVD
         # Same API level + device profile as the local `trobar_test` AVD
         # developers run this suite against manually.
+        #
+        # The existence check is what `emulator` itself looks for (its own
+        # error on a missing AVD names exactly this file: "there is no file
+        # ci_test.ini in $HOME/.android/avd"), not the .avd/ directory.
+        #
+        # The assertion AFTER the `if` is deliberate, not belt-and-suspenders:
+        # a command's non-zero exit *inside* an `if`/`then` is exit-status
+        # material the `if` itself consumes, so `bash -e` does NOT fail the
+        # step on it — measured directly on this job's first run, where
+        # avdmanager didn't produce ci_test.ini (output just stopped mid-way,
+        # no error surfaced) and the step still reported success. Without a
+        # check outside the `if`, that failure is invisible here and only
+        # shows up as "Unknown AVD name" when `emulator` starts — which then
+        # left `adb wait-for-device` (no timeout of its own, next step)
+        # hanging for the full 30-minute job timeout instead of failing fast.
         run: |
-          if [ ! -d ~/.android/avd/ci_test.avd ]; then
-            echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
+          if [ ! -f ~/.android/avd/ci_test.ini ]; then
+            echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force \
               -n ci_test -k "system-images;android-34;default;x86_64" -d pixel_6
           fi
+          test -f ~/.android/avd/ci_test.ini || { echo "::error::AVD ci_test was not created"; exit 1; }
       - name: Boot the emulator (headless)
         run: |
           "$ANDROID_HOME/emulator/emulator" -avd ci_test -no-window -no-audio -no-boot-anim \
             -gpu swiftshader_indirect -camera-back none &
-          "$ANDROID_HOME/platform-tools/adb" wait-for-device
+          echo $! > emulator.pid
+          # Fail fast (not the 30-minute job timeout) if the emulator process
+          # itself has already died — e.g. a bad AVD/flag — rather than
+          # leaving `adb wait-for-device` below to hang indefinitely against
+          # a device that will never appear (exactly what happened on the
+          # first run of this job, root-caused above).
+          sleep 5
+          kill -0 "$(cat emulator.pid)" || { echo "::error::emulator process exited immediately, see the log above"; exit 1; }
+          timeout 60 "$ANDROID_HOME/platform-tools/adb" wait-for-device
           # boot_completed can read true before the system is actually ready
           # to accept the instrumentation package, so poll rather than trust
           # the first true.

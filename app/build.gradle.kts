@@ -23,8 +23,8 @@ android {
         applicationId = "com.mfoss.trobar"
         minSdk = 26
         targetSdk = 34
-        versionCode = 48
-        versionName = "2.13.0"
+        versionCode = 49
+        versionName = "2.14.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // #61
     }
 

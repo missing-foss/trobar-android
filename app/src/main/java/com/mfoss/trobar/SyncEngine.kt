@@ -353,8 +353,10 @@ object SyncEngine {
     /** Walks the SAF tree for one relative path, or null if any segment
      * (folder or file) along the way is missing — shared by deleteOne and
      * the missing-file check, which only cares whether this
-     * returns null or not. */
-    private fun findLocalFile(root: DocumentFile, relativePath: String): DocumentFile? {
+     * returns null or not. Internal (not private) so SyncEngineTest can
+     * exercise this walk directly against a DocumentFile.fromFile() root,
+     * without needing a real SAF tree grant. */
+    internal fun findLocalFile(root: DocumentFile, relativePath: String): DocumentFile? {
         val parts = relativePath.split("/")
         var dir: DocumentFile? = root
         for (segment in parts.dropLast(1)) {

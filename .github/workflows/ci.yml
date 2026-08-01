@@ -141,19 +141,32 @@ jobs:
         # left `adb wait-for-device` (no timeout of its own, next step)
         # hanging for the full 30-minute job timeout instead of failing fast.
         run: |
+          AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
           if [ ! -f ~/.android/avd/ci_test.ini ]; then
-            # `echo no |` (a single answer) reliably produced NO output past
-            # "Auto-selecting single ABI x86_64" and no AVD on this job's
-            # second run — avdmanager apparently prompts more than once, and
-            # hitting EOF on a later prompt aborts silently rather than
-            # accepting a default. `yes "no" |` supplies an answer for as
-            # many prompts as it takes; avdmanager exiting closes its end of
-            # the pipe and `yes` gets SIGPIPE, same as the benign "Broken
-            # pipe" already seen from the `sdkmanager --licenses` step above.
-            yes "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force \
-              -n ci_test -k "system-images;android-34;default;x86_64" -d pixel_6
-            echo "avdmanager exit code: $?"
+            echo "-- valid device ids matching 'pixel' (sanity-checking -d below) --"
+            "$AVDMANAGER" list device 2>&1 | grep -i pixel || echo "(no pixel device ids found at all)"
+
+            # `yes "no" |` (unlimited answers, in case of more than one
+            # prompt) still produced NO output past "Auto-selecting single
+            # ABI x86_64", no error, exit code 0, and no ~/.android/avd/
+            # directory whatsoever on this job's third run — ruling out an
+            # EOF-on-a-later-prompt theory. Retrying without `-d` isolates
+            # whether `pixel_6` is actually a valid device id in this
+            # cmdline-tools version (12.0 on the hosted image) or the
+            # silent no-op has some other cause.
+            echo "-- attempt 1: with -d pixel_6 --"
+            yes "no" | "$AVDMANAGER" create avd --force \
+              -n ci_test -k "system-images;android-34;default;x86_64" -d pixel_6 2>&1
+            echo "exit code: $?"
+
+            if [ ! -f ~/.android/avd/ci_test.ini ]; then
+              echo "-- attempt 2: no device profile at all --"
+              yes "no" | "$AVDMANAGER" create avd --force \
+                -n ci_test -k "system-images;android-34;default;x86_64" 2>&1
+              echo "exit code: $?"
+            fi
           fi
+          echo "-- ~/.android/avd/ contents --"
           ls -la ~/.android/avd/ 2>&1 || echo "(no ~/.android/avd/ directory at all)"
           test -f ~/.android/avd/ci_test.ini || { echo "::error::AVD ci_test was not created"; exit 1; }
       - name: Boot the emulator (headless)

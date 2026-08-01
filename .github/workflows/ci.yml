@@ -81,6 +81,20 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      - name: Pin the AVD root
+        # This job's own first runs measured avdmanager silently writing a
+        # new AVD under ~/.config/.android/avd (confirmed via `find ~
+        # -iname ci_test*`) while `emulator` looks in ~/.android/avd by
+        # default and reports "Unknown AVD name" — this cmdline-tools
+        # version (12.0 on the hosted image) apparently defaults its prefs
+        # root to $XDG_CONFIG_HOME/.android rather than the traditional
+        # $HOME/.android, and neither ANDROID_AVD_HOME nor ANDROID_SDK_HOME
+        # was set to pin it otherwise. Setting ANDROID_AVD_HOME explicitly
+        # (first in avdmanager's/emulator's own documented search order:
+        # $ANDROID_AVD_HOME, $ANDROID_SDK_HOME/avd, $HOME/.android/avd)
+        # makes every later step — create, cache, boot — agree on the same
+        # directory regardless of this version's own default.
+        run: echo "ANDROID_AVD_HOME=$HOME/.android/avd" >> "$GITHUB_ENV"
       - name: Enable KVM (hardware-accelerated emulation on the hosted runner)
         # Standard udev-rule grant for /dev/kvm — hosted ubuntu-latest runners
         # have nested virtualization enabled but the default node permissions
@@ -124,52 +138,20 @@ jobs:
             "emulator" "system-images;android-34;default;x86_64"
       - name: Create the AVD
         # Same API level + device profile as the local `trobar_test` AVD
-        # developers run this suite against manually.
-        #
-        # The existence check is what `emulator` itself looks for (its own
-        # error on a missing AVD names exactly this file: "there is no file
-        # ci_test.ini in $HOME/.android/avd"), not the .avd/ directory.
-        #
-        # The assertion AFTER the `if` is deliberate, not belt-and-suspenders:
-        # a command's non-zero exit *inside* an `if`/`then` is exit-status
-        # material the `if` itself consumes, so `bash -e` does NOT fail the
-        # step on it — measured directly on this job's first run, where
-        # avdmanager didn't produce ci_test.ini (output just stopped mid-way,
-        # no error surfaced) and the step still reported success. Without a
-        # check outside the `if`, that failure is invisible here and only
-        # shows up as "Unknown AVD name" when `emulator` starts — which then
-        # left `adb wait-for-device` (no timeout of its own, next step)
-        # hanging for the full 30-minute job timeout instead of failing fast.
+        # developers run this suite against manually. `yes "no" |` (not a
+        # single `echo no |`) in case create prompts more than once for the
+        # "custom hardware profile?" question; the assertion after the `if`
+        # is deliberate, not belt-and-suspenders — a non-zero exit *inside*
+        # `if`/`then` is exit-status material the `if` consumes, so
+        # `bash -e` does NOT fail the step on it, and a missing AVD here
+        # otherwise only surfaces as "Unknown AVD name" when `emulator`
+        # starts, then a wait for a device that will never appear.
         run: |
-          AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
-          # Attempt 4's -d run reproduced the exact same silent no-op as
-          # attempts 1-3 (exit 0, "Auto-selecting single ABI x86_64" then
-          # immediate "Broken pipe", nothing written) while the no-`-d`
-          # fallback DID prompt (and floods on "no" not being a valid reply
-          # to whatever it actually asks there — a worse failure mode, not a
-          # better one, so `-d pixel_6` stays). Device id is confirmed valid
-          # (28/"pixel_6"). Stop guessing at the invocation and dump the
-          # actual environment + avdmanager's own usage text instead — the
-          # "search order" note in emulator's earlier error
-          # ($ANDROID_AVD_HOME, $ANDROID_SDK_HOME/avd, $HOME/.android/avd)
-          # applies to *writing* a new AVD too, so if either of the first two
-          # is unexpectedly set here, create could be silently succeeding
-          # against a different directory than the one this step checks.
-          echo "-- ANDROID_* environment --"
-          env | grep -i android | sort
-          echo "-- avdmanager create avd --help --"
-          "$AVDMANAGER" create avd --help 2>&1 || true
-          if [ ! -f ~/.android/avd/ci_test.ini ]; then
-            echo "-- attempt: with -d pixel_6 --"
-            yes "no" | "$AVDMANAGER" create avd --force \
-              -n ci_test -k "system-images;android-34;default;x86_64" -d pixel_6 2>&1
-            echo "exit code: $?"
+          if [ ! -f "$ANDROID_AVD_HOME/ci_test.ini" ]; then
+            yes "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force \
+              -n ci_test -k "system-images;android-34;default;x86_64" -d pixel_6
           fi
-          echo "-- ~/.android/avd/ contents --"
-          ls -la ~/.android/avd/ 2>&1 || echo "(no ~/.android/avd/ directory at all)"
-          echo "-- find any ci_test* file anywhere under \$HOME --"
-          find ~ -iname "ci_test*" 2>/dev/null
-          test -f ~/.android/avd/ci_test.ini || { echo "::error::AVD ci_test was not created"; exit 1; }
+          test -f "$ANDROID_AVD_HOME/ci_test.ini" || { echo "::error::AVD ci_test was not created"; exit 1; }
       - name: Boot the emulator (headless)
         run: |
           "$ANDROID_HOME/emulator/emulator" -avd ci_test -no-window -no-audio -no-boot-anim \

@@ -116,15 +116,26 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           ls -la /dev/kvm
-      - name: Cache the emulator package, system image, and created AVD
-        # #79's own caveat: cache the AVD/snapshot to keep boot time
-        # reasonable. Static key (not hashFiles(ci.yml)) deliberately — an
-        # unrelated edit to this file shouldn't cost the next PR a cold
-        # ~1GB re-download; bump the "v1" by hand if the AVD definition
-        # below ever changes. First-writer-wins (actions/cache never
-        # overwrites an existing key), so the "quit the emulator cleanly"
-        # step below matters: it's what lets that first run's boot snapshot
-        # actually land in the cache for every run after it to reuse.
+      - name: Cache the emulator package and system image
+        # #79's caveat about keeping boot time reasonable originally also
+        # cached ~/.android/avd itself, so a saved boot snapshot could skip
+        # a cold boot on later runs. Dropped after #102's first CI run hit
+        # exactly the failure mode that makes that fragile:
+        #
+        #   FATAL | A snapshot operation for 'ci_test' is pending and
+        #   timeout has expired. Exiting...
+        #
+        # `adb emu kill` (below, now just a plain best-effort shutdown) asks
+        # the emulator to quit but doesn't confirm the snapshot write it
+        # triggers actually finished before the job tears the runner down —
+        # a race that corrupted the cached AVD state badly enough that the
+        # *next* run's emulator refused to boot at all. Snapshots are
+        # disabled outright now (-no-snapshot below), so there's nothing
+        # left to corrupt; only the SDK packages (the actual ~1GB download
+        # cost) are cached. Static key (not hashFiles(ci.yml)) deliberately
+        # — an unrelated edit to this file shouldn't cost the next PR that
+        # download; bump the "v1" by hand if the packages installed below
+        # ever change.
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Hardcoded, not ${{ env.ANDROID_HOME }}: that's a shell env var
@@ -133,10 +144,9 @@ jobs:
           # it would silently resolve empty here. Confirmed against
           # actions/runner-images' Ubuntu 24.04 readme.
           path: |
-            ~/.android/avd
             /usr/local/lib/android/sdk/emulator
             /usr/local/lib/android/sdk/system-images
-          key: android-avd-api34-x86_64-v1
+          key: android-sdk-emulator-api34-x86_64-v1
       - name: Install the emulator package + API 34 x86_64 system image
         # Idempotent regardless of the cache step's hit/miss: a cache hit
         # means these already exist and sdkmanager no-ops; a miss (or a
@@ -164,7 +174,7 @@ jobs:
       - name: Boot the emulator (headless)
         run: |
           "$ANDROID_HOME/emulator/emulator" -avd ci_test -no-window -no-audio -no-boot-anim \
-            -gpu swiftshader_indirect -camera-back none &
+            -gpu swiftshader_indirect -camera-back none -no-snapshot &
           echo $! > emulator.pid
           # Fail fast (not the 30-minute job timeout) if the emulator process
           # itself has already died — e.g. a bad AVD/flag — rather than
@@ -191,6 +201,6 @@ jobs:
           path: app/build/outputs/androidTest-results/connected
           retention-days: 7
           if-no-files-found: ignore
-      - name: Quit the emulator cleanly (lets it save a boot snapshot for the cache above)
+      - name: Quit the emulator
         if: always()
         run: $ANDROID_HOME/platform-tools/adb emu kill || true

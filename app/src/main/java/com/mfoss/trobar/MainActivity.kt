@@ -175,15 +175,35 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun AppRoot() {
-        val pairing by Prefs.pairing(this).collectAsState(initial = NOT_LOADED)
+        // #101: PairingState distinguishes "never paired" from "paired, but
+        // the token can't be decrypted" — collectAsState's own `initial`
+        // (before DataStore's first real emission) is the only remaining
+        // `null`, since Prefs.pairing() itself never emits one.
+        val pairingState by Prefs.pairing(this).collectAsState(initial = null)
         val treeUri by Prefs.treeUri(this).collectAsState(initial = null)
         var showSettings by remember { mutableStateOf(false) }
         var showAbout by remember { mutableStateOf(false) }
+        // Set on CredentialsUnreadableScreen's "Pair again" tap and checked
+        // ahead of the plain NotPaired branch below, so the wizard still
+        // opens pre-filled with the (still-known) server URL even once the
+        // state itself has moved on from TokenUnreadable.
+        var repairServerUrl by remember { mutableStateOf<String?>(null) }
+        val state = pairingState // local val: `by` delegates don't smart-cast
 
         when {
             showAbout -> AboutScreen(onBack = { showAbout = false })
-            pairing === NOT_LOADED -> Unit // still loading prefs, render nothing yet
-            pairing == null -> EnrollmentWizard(onEnrolled = { url, token ->
+            state == null -> Unit // still loading prefs, render nothing yet
+            repairServerUrl != null -> EnrollmentWizard(
+                initialServerUrl = repairServerUrl!!,
+                onEnrolled = { url, token ->
+                    lifecycleScope.launch {
+                        Prefs.setPairing(this@MainActivity, url, token)
+                        Prefs.setRecoveryPending(this@MainActivity, true)
+                    }
+                    repairServerUrl = null
+                },
+            )
+            state is Prefs.PairingState.NotPaired -> EnrollmentWizard(onEnrolled = { url, token ->
                 lifecycleScope.launch {
                     Prefs.setPairing(this@MainActivity, url, token)
                     // #34: the first sync checks the (soon-to-be-picked) folder
@@ -191,6 +211,10 @@ class MainActivity : ComponentActivity() {
                     Prefs.setRecoveryPending(this@MainActivity, true)
                 }
             })
+            state is Prefs.PairingState.TokenUnreadable -> CredentialsUnreadableScreen(
+                serverUrl = state.serverUrl,
+                onRepair = { url -> repairServerUrl = url },
+            )
             treeUri == null -> FolderPickerScreen(onPicked = { uri ->
                 contentResolver.takePersistableUriPermission(
                     uri,
@@ -202,7 +226,7 @@ class MainActivity : ComponentActivity() {
                 }
             })
             showSettings -> SettingsScreen(
-                pairing = pairing!!,
+                pairing = (state as Prefs.PairingState.Paired).pairing,
                 treeUri = treeUri!!,
                 onBack = { showSettings = false },
                 onOpenAbout = { showAbout = true },
@@ -228,7 +252,7 @@ class MainActivity : ComponentActivity() {
                 },
             )
             else -> StatusScreen(
-                pairing = pairing!!,
+                pairing = (state as Prefs.PairingState.Paired).pairing,
                 onOpenSettings = { showSettings = true },
                 // #34: Re-enroll on a persistent 401 — clear the (now-orphaned)
                 // pairing to return to pairing/enrollment; the local library +
@@ -236,13 +260,6 @@ class MainActivity : ComponentActivity() {
                 onReEnroll = { lifecycleScope.launch { Prefs.clearPairing(this@MainActivity) } },
             )
         }
-    }
-
-    companion object {
-        // Distinguishes "DataStore hasn't emitted yet" from "no pairing saved" —
-        // both surface as null/initial otherwise, which would flash the
-        // pairing screen for a frame even when already paired.
-        private val NOT_LOADED = Prefs.Pairing("", "")
     }
 }
 

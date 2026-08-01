@@ -78,6 +78,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="conn_re_enroll">Re-enroll</string>
     <string name="conn_change_server">Change server address</string>
     <string name="conn_re_pair">Re-pair</string>
+    <string name="credentials_unreadable_title">Your saved credentials couldn\'t be read</string>
+    <string name="credentials_unreadable_body">This can happen after a device reboot. Your library and settings are kept — you\'ll just need to pair again.</string>
+    <string name="credentials_unreadable_button">Pair again</string>
 
     <string name="unpair_dialog_title">Unpair this device?</string>
     <string name="unpair_dialog_text">The device will no longer receive syncs until it\'s re-paired with a new QR code.</string>

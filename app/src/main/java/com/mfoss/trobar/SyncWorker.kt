@@ -45,7 +45,12 @@ import java.util.concurrent.TimeUnit
  * lifecycle does not survive the screen turning off. */
 class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val pairing = Prefs.pairing(applicationContext).firstOrNull() ?: return@withContext Result.failure()
+        // #101: any non-Paired outcome (never paired, or a token that can't
+        // be decrypted) is equally "can't sync" for a background worker —
+        // no user is present to act on the distinction the way the UI does.
+        val pairingState = Prefs.pairing(applicationContext).firstOrNull()
+        val pairing = (pairingState as? Prefs.PairingState.Paired)?.pairing
+            ?: return@withContext Result.failure()
         val treeUri = Prefs.treeUri(applicationContext).firstOrNull() ?: return@withContext Result.failure()
         val nomediaEnabled = Prefs.nomediaEnabled(applicationContext).firstOrNull() ?: false
         val missingFileBehavior = Prefs.missingFileBehavior(applicationContext).firstOrNull() ?: Prefs.MISSING_ASK

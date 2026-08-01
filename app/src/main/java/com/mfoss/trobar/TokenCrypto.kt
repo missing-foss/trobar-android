@@ -5,6 +5,7 @@ package com.mfoss.trobar
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -25,8 +26,13 @@ import javax.crypto.spec.GCMParameterSpec
  * androidx.security:security-crypto library, so this adds no dependency.
  */
 object TokenCrypto {
-    private const val KEYSTORE = "AndroidKeyStore"
-    private const val KEY_ALIAS = "trobar_token_key"
+    private const val TAG = "TokenCrypto"
+
+    // internal (not private): #101's regression test deletes this exact
+    // alias from a real KeyStore.getInstance(KEYSTORE) to simulate an
+    // unreadable key without mocking anything.
+    internal const val KEYSTORE = "AndroidKeyStore"
+    internal const val KEY_ALIAS = "trobar_token_key"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
     private const val IV_LEN = 12
     private const val TAG_BITS = 128
@@ -37,9 +43,29 @@ object TokenCrypto {
      *  contain a colon). */
     const val PREFIX = "v1:"
 
-    private fun secretKey(): SecretKey {
+    /** #101: `getEntry()` failing (an unreadable/corrupt alias, not merely a
+     * missing one) is wrapped separately from the `as?` cast below it, so a
+     * real Keystore exception is distinguishable in logs from "no key yet" —
+     * before this, both collapsed into the same `null` and were impossible
+     * to tell apart from the outside. Never generates — see [getOrCreateKey]
+     * for the only place that's allowed to. */
+    private fun getExistingKeyOrNull(): SecretKey? {
         val ks = KeyStore.getInstance(KEYSTORE).apply { load(null) }
-        (ks.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
+        val entry = try {
+            ks.getEntry(KEY_ALIAS, null)
+        } catch (e: Exception) {
+            Log.w(TAG, "Keystore entry for $KEY_ALIAS unreadable (${e.javaClass.simpleName}) — " +
+                "treating as unavailable, NOT regenerating (that would permanently destroy " +
+                "whatever it could otherwise still decrypt)", e)
+            return null
+        }
+        return (entry as? KeyStore.SecretKeyEntry)?.secretKey
+    }
+
+    /** Only [encrypt] may call this — pairing time is the one place a
+     * missing key genuinely means "create one", never a read. */
+    private fun getOrCreateKey(): SecretKey {
+        getExistingKeyOrNull()?.let { return it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE)
         generator.init(
             KeyGenParameterSpec.Builder(
@@ -58,7 +84,7 @@ object TokenCrypto {
      *  (GCM must never reuse an IV under the same key). */
     fun encrypt(plaintext: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey())
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
         val iv = cipher.iv
         val ct = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
         val out = ByteArray(iv.size + ct.size)
@@ -68,16 +94,35 @@ object TokenCrypto {
     }
 
     /** Reverses [encrypt]. Returns null on any failure (e.g. the Keystore key
-     *  was lost); callers treat that as "no valid token" → re-pair. */
-    fun decrypt(stored: String): String? = try {
-        val raw = Base64.decode(stored.removePrefix(PREFIX), Base64.NO_WRAP)
-        val iv = raw.copyOfRange(0, IV_LEN)
-        val ct = raw.copyOfRange(IV_LEN, raw.size)
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(TAG_BITS, iv))
-        String(cipher.doFinal(ct), Charsets.UTF_8)
-    } catch (ignored: Exception) {
-        null
+     * was lost); callers treat that as "credentials unreadable", distinct
+     * from "never paired" (see Prefs.PairingState).
+     *
+     * #101: this used to share [getOrCreateKey] with [encrypt] — a read
+     * silently minting and persisting a brand new key the moment the old
+     * one couldn't be loaded (a transient condition observed right after a
+     * device reboot). That's not a retry-safe failure: the new key
+     * permanently overwrites the alias, so the *next* attempt to decrypt
+     * the (now merely stale, previously perfectly fine) stored ciphertext
+     * fails too — forever, since the key that could read it is gone. Only
+     * [getExistingKeyOrNull] is used here, specifically so an unreadable key
+     * stays a transient failure the next launch can still recover from,
+     * rather than an unrecoverable one this call just caused. */
+    fun decrypt(stored: String): String? {
+        val key = getExistingKeyOrNull() ?: run {
+            Log.w(TAG, "No usable Keystore key for $KEY_ALIAS — cannot decrypt stored token")
+            return null
+        }
+        return try {
+            val raw = Base64.decode(stored.removePrefix(PREFIX), Base64.NO_WRAP)
+            val iv = raw.copyOfRange(0, IV_LEN)
+            val ct = raw.copyOfRange(IV_LEN, raw.size)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
+            String(cipher.doFinal(ct), Charsets.UTF_8)
+        } catch (e: Exception) {
+            Log.w(TAG, "decrypt failed (${e.javaClass.simpleName}) — token stays unreadable", e)
+            null
+        }
     }
 
     fun isEncrypted(value: String): Boolean = value.startsWith(PREFIX)

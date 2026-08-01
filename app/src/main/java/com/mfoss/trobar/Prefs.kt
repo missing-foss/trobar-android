@@ -10,7 +10,9 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-private val Context.dataStore by preferencesDataStore(name = "trobar_prefs")
+// Internal (not private) so PrefsTest can seed/inspect raw preference state
+// (e.g. a legacy plaintext token) to exercise migrateTokenIfNeeded() directly.
+internal val Context.dataStore by preferencesDataStore(name = "trobar_prefs")
 
 /** Pairing + sync state — server URL/token from the QR code, the SAF tree
  * the user picked once, and the last sync outcome for the status screen. */

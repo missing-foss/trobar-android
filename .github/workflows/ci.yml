@@ -94,7 +94,16 @@ jobs:
         # $ANDROID_AVD_HOME, $ANDROID_SDK_HOME/avd, $HOME/.android/avd)
         # makes every later step — create, cache, boot — agree on the same
         # directory regardless of this version's own default.
-        run: echo "ANDROID_AVD_HOME=$HOME/.android/avd" >> "$GITHUB_ENV"
+        #
+        # mkdir explicitly: pinning ANDROID_AVD_HOME to a path that doesn't
+        # exist yet on a fresh runner produced the exact same silent no-op
+        # (exit 0, nothing written, no error) as the original bug this step
+        # fixes — avdmanager's own internal default path apparently
+        # bootstraps its directory tree the first time, but doesn't when
+        # the location instead comes from this env var.
+        run: |
+          mkdir -p "$HOME/.android/avd"
+          echo "ANDROID_AVD_HOME=$HOME/.android/avd" >> "$GITHUB_ENV"
       - name: Enable KVM (hardware-accelerated emulation on the hosted runner)
         # Standard udev-rule grant for /dev/kvm — hosted ubuntu-latest runners
         # have nested virtualization enabled but the default node permissions

@@ -1,0 +1,14 @@
+*.iml
+.gradle/
+build/
+local.properties
+.idea/
+*.keystore
+*.jks
+
+# CI secret-scan downloads this binary into the tree; keep it out of git
+# and out of reuse lint (#50, mirrors trobar-server#181).
+/gitleaks
+
+# Optional per-checkout additions to the leak scan's pattern list
+dev/forbidden-terms.local.txt

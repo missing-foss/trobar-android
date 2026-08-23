@@ -1,0 +1,189 @@
+<!--
+SPDX-FileCopyrightText: 2026 missing-foss
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
+<resources>
+    <string name="app_name">Trobar</string>
+
+    <string name="internal_storage_prefix">Internal storage/</string>
+
+    <string name="scan_qr_button">Scan QR code</string>
+    <string name="server_url_label">Server URL</string>
+    <string name="token_label">Token</string>
+    <string name="copy_error_button">Copy error</string>
+
+    <!-- Enrollment wizard (#34) -->
+    <string name="enroll_title">Enroll this device</string>
+    <string name="enroll_subtitle">Scan the QR code in Trobar or\nenter the server URL and code below.</string>
+    <string name="enroll_or_manual">or enter it manually</string>
+    <string name="enroll_code_label">Enrollment code</string>
+    <string name="enroll_continue">Continue</string>
+    <string name="device_name_label">Device name</string>
+    <string name="transcode_label">Audio format</string>
+    <string name="transcode_originals">Originals (no transcoding)</string>
+    <string name="transcode_mp3_320">MP3 320 kbit/s</string>
+    <string name="enroll_code_expiry_note">The code is single-use and expires 10 minutes after it\'s shown.</string>
+    <string name="enroll_button">Enroll</string>
+    <string name="enroll_back">Back</string>
+    <string name="enroll_failed_generic">Enrollment failed</string>
+    <string name="clear_error_button">Clear</string>
+
+    <string name="folder_picker_title">Sync folder</string>
+    <string name="folder_picker_subtitle">This is where your tracks will be downloaded.</string>
+    <string name="choose_folder_button">Choose a folder</string>
+    <!-- #87: the recovery-manifest walk already avoids re-downloading
+         anything already present in the chosen folder (see SyncEngine's
+         recoverIfPending), on every fresh enrollment, not just a
+         same-phone reinstall. This just makes that discoverable. -->
+    <string name="folder_picker_recovery_hint">Already have this music on another device? Copy it into the folder you pick here before your first sync — Trobar will recognise it and skip re-downloading it.</string>
+
+    <string name="sync_failure">Failed: %1$s</string>
+    <plurals name="sync_downloaded">
+        <item quantity="one">%1$d downloaded</item>
+        <item quantity="other">%1$d downloaded</item>
+    </plurals>
+    <plurals name="sync_deleted">
+        <item quantity="one">%1$d deleted</item>
+        <item quantity="other">%1$d deleted</item>
+    </plurals>
+    <plurals name="sync_failed">
+        <item quantity="one">%1$d failed</item>
+        <item quantity="other">%1$d failed</item>
+    </plurals>
+
+    <string name="settings_title">Settings</string>
+    <string name="sync_in_progress">Sync in progress…</string>
+    <string name="recovery_scanning">Scanning your library…</string>
+    <plurals name="recovery_files_scanned">
+        <item quantity="one">%1$d file found</item>
+        <item quantity="other">%1$d files found</item>
+    </plurals>
+    <string name="tap_logo_to_sync">Tap the logo to sync</string>
+    <string name="sync_progress_count">%1$d / %2$d</string>
+    <string name="last_sync">Last sync: %1$s</string>
+    <string name="never">never</string>
+    <string name="last_error">Last error: %1$s</string>
+
+    <string name="save_button">Save</string>
+    <string name="cancel_button">Cancel</string>
+    <string name="limit_saved">Limit saved</string>
+    <string name="save_failed_generic">Save failed</string>
+    <string name="conn_unreachable_title">Can\'t reach the server</string>
+    <string name="conn_unreachable_body">Your server is unavailable right now. Your downloaded music stays on the device.</string>
+    <string name="conn_unauthorized_title">Device not recognized</string>
+    <string name="conn_unauthorized_body">The server no longer recognizes this device — it may have been reset. Re-enroll to reconnect; your downloaded music stays on the device.</string>
+    <string name="conn_retry">Retry</string>
+    <string name="conn_re_enroll">Re-enroll</string>
+    <string name="conn_change_server">Change server address</string>
+    <string name="conn_re_pair">Re-pair</string>
+    <string name="credentials_unreadable_title">Your saved credentials couldn\'t be read</string>
+    <string name="credentials_unreadable_body">This can happen after a device reboot. Your library and settings are kept — you\'ll just need to pair again.</string>
+    <string name="credentials_unreadable_button">Pair again</string>
+
+    <string name="unpair_dialog_title">Unpair this device?</string>
+    <string name="unpair_dialog_text">The device will no longer receive syncs until it\'s re-paired with a new QR code.</string>
+    <string name="unpair_button">Unpair</string>
+
+    <string name="nomedia_dialog_title">Hide from gallery?</string>
+    <string name="nomedia_dialog_text">A .nomedia file will be created at the root of the sync folder. This hides its entire contents — including the music — from apps that discover files via the system\'s media index (Gallery, Photos…). Players that scan the folder directly, like Poweramp, are generally not affected.</string>
+    <string name="enable_button">Enable</string>
+
+    <string name="server_address_dialog_title">Server address</string>
+    <string name="url_label">URL</string>
+    <string name="allocated_space_label">Allocated space</string>
+    <string name="limit_gb_field_label">Limit in GB (blank = none)</string>
+
+    <string name="back_content_description">Back</string>
+    <string name="this_device_label">This device</string>
+
+    <string name="section_connection">CONNECTION</string>
+    <string name="server_label">Server</string>
+
+    <string name="section_storage">STORAGE</string>
+    <string name="folder_label">Folder</string>
+    <string name="storage_gb_value">%1$.1f GB</string>
+    <string name="unlimited">Unlimited</string>
+    <string name="storage_free_of_total">%1$s GB free of %2$s GB</string>
+    <string name="limit_exceeds_free_space">This limit exceeds the actual free space!</string>
+
+    <string name="section_sync">SYNC</string>
+    <string name="hide_from_gallery_label">Hide from gallery</string>
+    <string name="hide_from_gallery_description">Useful with players like Poweramp</string>
+    <string name="keep_device_content_label">Keep device content</string>
+    <string name="keep_device_content_description">The server won\'t delete this device\'s tracks — it survives a server reset. It can still add new content you select.</string>
+    <string name="missing_files_label">Locally deleted files</string>
+    <string name="missing_files_description">What to do when a synced file is found missing on this device</string>
+    <string name="missing_files_ask">Ask me</string>
+    <string name="missing_files_resync">Resync</string>
+    <string name="missing_files_exclude">Leave deleted</string>
+    <plurals name="missing_tracks_notice">
+        <item quantity="one">%1$d track is missing locally</item>
+        <item quantity="other">%1$d tracks are missing locally</item>
+    </plurals>
+    <string name="missing_tracks_resync_button">Re-download</string>
+    <string name="missing_tracks_exclude_button">Mark as deleted</string>
+
+    <string name="section_sync_conditions">WHEN TO SYNC</string>
+    <string name="auto_sync_via_label">Auto-sync</string>
+    <string name="network_wifi">Wi-Fi only</string>
+    <string name="network_wifi_and_mobile">Wi-Fi + mobile data</string>
+    <string name="network_roaming">Wi-Fi + mobile + roaming</string>
+    <string name="charging_idle_label">Only while charging and idle</string>
+    <string name="charging_idle_description">Waits for the automatic sync until the device is on the charger and not in use. Off by default — turning this on can push a sync later than the usual 6-hour interval. Manual "sync now" always ignores this.</string>
+
+    <string name="section_appearance">APPEARANCE</string>
+    <string name="dynamic_color_label">Dynamic colors</string>
+    <string name="dynamic_color_description">Theme based on wallpaper</string>
+    <string name="language_label">Language</string>
+    <string name="language_system">System</string>
+
+    <string name="unpair_device_button">Unpair this device</string>
+
+    <string name="api_error_generic">%1$s — HTTP error %2$d</string>
+    <string name="api_error_file">file/%1$d — HTTP error %2$d</string>
+
+    <string name="sync_folder_not_found">Sync folder not found — choose it again.</string>
+    <string name="cannot_reach_server">Could not reach the server: %1$s</string>
+    <string name="file_creation_failed">could not create file</string>
+    <string name="empty_response">empty response</string>
+    <string name="write_stream_unavailable">write stream unavailable</string>
+    <string name="download_failed">download failed</string>
+    <string name="folder_creation_failed">could not create folder \'%1$s\'</string>
+    <string name="track_error">%1$s: %2$s</string>
+
+    <string name="notification_channel_name">Sync</string>
+    <string name="notification_sync_progress">Sync: %1$d / %2$d</string>
+
+    <!-- About screen -->
+    <string name="section_about">About</string>
+    <string name="about_tile_label">About Trobar</string>
+    <string name="about_title">About</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="check_updates_button">Check for updates</string>
+    <string name="update_checking">Checking…</string>
+    <string name="update_available">Update available: %1$s — see Releases.</string>
+    <string name="update_up_to_date">You are running the latest release (%1$s).</string>
+    <string name="update_check_failed">Could not reach GitHub (%1$s) — try again later.</string>
+    <string name="donate_button">Donate</string>
+    <string name="about_links_section">Links</string>
+    <string name="about_documentation">Documentation</string>
+    <string name="about_source_code">Source code</string>
+    <string name="about_report_issue">Report an issue or request a feature</string>
+    <string name="about_releases">Releases</string>
+    <string name="about_licenses_section">Licenses</string>
+    <string name="about_license_summary">Trobar for Android is free software under the GNU GPL, version 3 or later. Bundled fonts and libraries keep their own licenses.</string>
+    <string name="show_license_button">License</string>
+    <string name="show_notices_button">Third-party</string>
+    <string name="license_dialog_title">License (GPL-3.0-or-later)</string>
+    <string name="notices_dialog_title">Third-party notices</string>
+    <string name="close_button">Close</string>
+
+    <!-- Easter egg: 5 taps on the About screen's bard -->
+    <string name="tictactoe_title">Duel the bard</string>
+    <string name="tictactoe_player_win">You\'ve bested the bard\'s tune!</string>
+    <string name="tictactoe_bard_win">The bard\'s melody prevails.</string>
+    <string name="tictactoe_draw">A well-matched duet — call it a draw.</string>
+    <string name="tictactoe_play_again">Play again</string>
+</resources>

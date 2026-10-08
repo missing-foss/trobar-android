@@ -16,6 +16,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.json.JSONException
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -143,6 +144,33 @@ class ApiClientTest {
     }
 
     @Test
+    fun devicePlaylistsAreSentAsTheServerReadsThem() {
+        server.enqueue(MockResponse().setResponseCode(200).setBody(
+            """{"playlists": 1, "tracks": 2, "matched": 1, "unknown": 1}"""))
+        val n = api.postDevicePlaylists(listOf(DevicePlaylist("Playlists/Gym.m3u", listOf("A/B/1.mp3", "../C/D/2.mp3"))))
+        assertEquals(1, n)
+        val req = server.takeRequest()
+        assertEquals("/api/device/playlists", req.path)
+        assertEquals("Bearer test-token", req.getHeader("Authorization"))
+        val sent = org.json.JSONObject(req.body.readUtf8()).getJSONArray("playlists").getJSONObject(0)
+        assertEquals("Playlists/Gym.m3u", sent.getString("path"))
+        assertEquals("../C/D/2.mp3", sent.getJSONArray("entries").getString(1))
+    }
+
+    @Test
+    fun aServerWithoutTheDevicePlaylistsEndpointIsNotAnError() {
+        server.enqueue(MockResponse().setResponseCode(404).setBody("""{"error": "Not Found"}"""))
+        assertNull(api.postDevicePlaylists(emptyList()))
+        server.enqueue(MockResponse().setResponseCode(500).setBody("""{"error": "boom"}"""))
+        try {
+            api.postDevicePlaylists(emptyList())
+            fail("expected an IOException")
+        } catch (e: java.io.IOException) {
+            assertEquals("boom", e.message)
+        }
+    }
+
+    @Test
     fun unauthorizedResponseThrowsUnauthorizedExceptionWithServerMessage() {
         server.enqueue(
             MockResponse().setResponseCode(401).setBody("""{"error": "Token no longer valid"}"""),
@@ -153,6 +181,34 @@ class ApiClientTest {
             fail("expected an UnauthorizedException")
         } catch (e: UnauthorizedException) {
             assertEquals("Token no longer valid", e.message)
+        }
+    }
+
+    @Test
+    fun deviceInfoAppApiIsAnIntegerOrZero() {
+        val base = """"name": "P", "max_size_bytes": null, "device_type": "phone""""
+        for ((json, expected) in listOf(
+            "{$base}" to 0, // a server from before the App API
+            """{$base, "app_api": 0}""" to 0,
+            """{$base, "app_api": 1}""" to 1,
+            """{$base, "app_api": "1"}""" to 0, // not a number: no capability claimed
+            """{$base, "app_api": "abc"}""" to 0,
+        )) {
+            server.enqueue(MockResponse().setResponseCode(200).setBody(json))
+            assertEquals(json, expected, api.getDeviceInfo().appApi)
+        }
+    }
+
+    @Test
+    fun deviceInfoIconIsTheServersIdOrNull() {
+        val base = """"name": "P", "max_size_bytes": null, "device_type": "phone""""
+        for ((json, expected) in listOf(
+            "{$base}" to null, // a server from before device icons
+            """{$base, "icon": null}""" to null, // none chosen
+            """{$base, "icon": "cassette"}""" to "cassette",
+        )) {
+            server.enqueue(MockResponse().setResponseCode(200).setBody(json))
+            assertEquals(json, expected, api.getDeviceInfo().icon)
         }
     }
 }

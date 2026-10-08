@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 missing-foss
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<resources>
+    <attr name="trobarGround" format="color" />
+    <attr name="trobarDisc" format="color" />
+    <attr name="trobarStar" format="color" />
+    <attr name="trobarDot" format="color" />
+    <attr name="trobarText" format="color" />
+    <attr name="trobarAccent" format="color" />
+</resources>

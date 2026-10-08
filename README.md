@@ -17,23 +17,32 @@ up that way server-side).
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/phone-01-pairing.png" width="200" alt="Enroll this device">
-  <img src="docs/screenshots/phone-02-status-paired.png" width="200" alt="Sync status">
-  <img src="docs/screenshots/phone-05-settings.png" width="200" alt="Settings">
-  <img src="docs/screenshots/phone-02-status-dark.png" width="200" alt="Sync status (dark theme)">
+  <img src="docs/screenshots/phone-02-home.png" width="200" alt="Home: recently added albums">
+  <img src="docs/screenshots/phone-03-library.png" width="200" alt="Library: artists">
+  <img src="docs/screenshots/phone-05-syncing.png" width="200" alt="Settings during a sync">
+  <img src="docs/screenshots/phone-06-themes.png" width="200" alt="The theme picker">
 </p>
 
-<sub>Enroll · sync status · settings · dark theme. Captured on a Pixel 6
-emulator against the synthetic dev library — no real or copyrighted content.
-More (syncing, synced, enrollment config, dark settings) under
-[`docs/screenshots/`](docs/screenshots/).</sub>
+<sub>Home · Library · a sync in progress · the five themes. Captured on a Pixel 6
+emulator against trobar-server's showcase library: invented artists, albums and
+cover art, nothing real or copyrighted.</sub>
 
 <p align="center">
-  <img src="docs/screenshots/tablet-01-pairing.png" width="520" alt="Tablet — adaptive, centred layout">
+  <img src="docs/screenshots/phone-07-home-nuech.png" width="200" alt="Home in the Nuèch theme">
+  <img src="docs/screenshots/phone-08-home-garriga.png" width="200" alt="Home in the Garriga theme">
+  <img src="docs/screenshots/phone-09-home-contraste.png" width="200" alt="Home in the Contraste theme">
 </p>
 
-<sub>On tablets and foldables the layout adapts — content is centred at a
-readable max-width instead of stretched edge-to-edge.</sub>
+<sub>A theme recolours the whole app: Nuèch, Garriga and Contraste. More
+(enrolment, Playlists, Simple mode) under
+[`docs/screenshots/`](docs/screenshots/), with how they were made.</sub>
+
+<p align="center">
+  <img src="docs/screenshots/tablet-01-library.png" width="520" alt="Tablet: the Library with the artist list and the selected artist side by side">
+</p>
+
+<sub>On a tablet, the Library shows the artist list and the selected artist side
+by side.</sub>
 
 ## Install
 
@@ -51,6 +60,25 @@ That's the reliable method everywhere. There's also a one-tap button:
 **Without Obtainium**: download the APK from
 [Releases](https://github.com/missing-foss/trobar-android/releases)
 (tags `vX.Y.Z`) and install it.
+
+## A warning you will see after updates
+
+Google's developer-verification requirement is expected to stop sideloaded apps
+from installing and running on certified Android devices. Trobar is sideloaded —
+both methods above are exactly the distribution path that requirement closes —
+so the app shows a notice about it on the first launch after each update, until
+the situation changes. The notice comes from
+[FreeDroidWarn](https://github.com/woheller69/FreeDroidWarn).
+
+It has three buttons, two of which open a site we do not control:
+
+- **OK** — dismisses it. Nothing is opened, and it stays dismissed until the
+  next version.
+- **Details** — opens [keepandroidopen.org](https://keepandroidopen.org), a
+  campaign site about the requirement.
+- **Solution** (red) — opens the
+  [FreeDroidWarn README](https://github.com/woheller69/FreeDroidWarn?tab=readme-ov-file#solutions),
+  where the library's own author sets out what they suggest doing about it.
 
 ## Verifying the download
 
@@ -72,8 +100,10 @@ later update is ever signed by a different key.
 
 ## Pair
 
-Create a device in the Trobar web app and scan the QR code with the app's
-pairing screen, then pick a sync folder. Full walkthrough:
+In the Trobar web app, choose **Add a mobile device** and **Generate pairing
+code**. Scan the QR code with the app's enrolment screen, or type the server
+URL and the code, then pick a sync folder: the app creates its own device on
+the server. Full walkthrough:
 [the Android client guide](https://missing-foss.github.io/trobar-server/clients/android/)
 in the Trobar documentation.
 

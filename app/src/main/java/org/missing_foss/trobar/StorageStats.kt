@@ -6,6 +6,16 @@ import android.content.Context
 import android.net.Uri
 import android.os.StatFs
 import android.provider.DocumentsContract
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 
 data class StorageStats(val freeBytes: Long, val totalBytes: Long)
@@ -82,5 +92,30 @@ private fun storageStatsFromRootsQuery(context: Context, treeUri: Uri): StorageS
         }
     } catch (ignored: Exception) {
         null
+    }
+}
+
+/** The volume's use as a bar, "x GB free of y GB", and a warning when the
+ * device's allocated space ([limitBytes]) is more than is free. Settings shows
+ * it under the allocated space; Simple mode on its Sync screen. */
+@Composable
+fun StorageUsage(stats: StorageStats, limitBytes: Long?, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LinearProgressIndicator(
+            progress = { (stats.totalBytes - stats.freeBytes).toFloat() / stats.totalBytes.toFloat() },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            stringResource(R.string.storage_free_of_total, formatGB(stats.freeBytes), formatGB(stats.totalBytes)),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline,
+        )
+        if (limitBytes != null && limitBytes > stats.freeBytes) {
+            Text(
+                stringResource(R.string.limit_exceeds_free_space),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
     }
 }

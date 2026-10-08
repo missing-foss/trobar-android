@@ -5,6 +5,8 @@ package org.missing_foss.trobar
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -29,10 +31,19 @@ object Prefs {
     private val NETWORK_MODE = stringPreferencesKey("network_mode")
     private val REQUIRE_CHARGING_AND_IDLE = booleanPreferencesKey("require_charging_and_idle")
     private val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
+    private val APP_MODE = stringPreferencesKey("app_mode")
+    private val BRAND_THEME = stringPreferencesKey("brand_theme")
+    private val MATCH_ICON_TO_THEME = booleanPreferencesKey("match_icon_to_theme")
     private val NOMEDIA = booleanPreferencesKey("nomedia")
     private val MISSING_FILE_BEHAVIOR = stringPreferencesKey("missing_file_behavior")
     private val PENDING_MISSING_TRACKS = stringPreferencesKey("pending_missing_tracks")
-
+    // The paired server's App API level, refreshed on every probe of
+    // /api/device/info; absent until the first probe after pairing.
+    private val APP_API = intPreferencesKey("app_api")
+    // The device the header's selector names (#50): this phone's own choice,
+    // kept here and not on the server, whose remembered destinations belong
+    // to the account -- a choice made on one phone must not become another's.
+    private val HEADER_DEVICE = longPreferencesKey("header_device")
     // "wifi_only" | "wifi_and_mobile" | "any" (any = incl. roaming)
     const val NETWORK_WIFI_ONLY = "wifi_only"
     const val NETWORK_WIFI_AND_MOBILE = "wifi_and_mobile"
@@ -81,6 +92,8 @@ object Prefs {
         context.dataStore.edit {
             it[SERVER_URL] = serverUrl
             it[TOKEN] = encrypted
+            it.remove(APP_API) // a different server until its first probe says otherwise
+            it.remove(HEADER_DEVICE) // its ids are another server's
         }
     }
 
@@ -106,13 +119,44 @@ object Prefs {
         context.dataStore.edit {
             it.remove(SERVER_URL)
             it.remove(TOKEN)
+            it.remove(APP_API)
+            it.remove(HEADER_DEVICE)
         }
     }
 
+    /** null: no probe has answered since this pairing was stored. */
+    fun appApi(context: Context): Flow<Int?> =
+        context.dataStore.data.map { it[APP_API] }
+
+    suspend fun setAppApi(context: Context, level: Int) {
+        context.dataStore.edit { it[APP_API] = level }
+    }
+
+    suspend fun clearAppApi(context: Context) {
+        context.dataStore.edit { it.remove(APP_API) }
+    }
+
+    /** null: nothing chosen, so the header names this phone. */
+    fun headerDevice(context: Context): Flow<Long?> =
+        context.dataStore.data.map { it[HEADER_DEVICE] }
+
+    suspend fun setHeaderDevice(context: Context, deviceId: Long) {
+        context.dataStore.edit { it[HEADER_DEVICE] = deviceId }
+    }
+
+    suspend fun clearHeaderDevice(context: Context) {
+        context.dataStore.edit { it.remove(HEADER_DEVICE) }
+    }
+
     /** Changing the server address alone (token stays — same device
-     * identity, just reachable at a different URL, e.g. LAN IP changed). */
+     * identity, just reachable at a different URL, e.g. LAN IP changed).
+     * The App API level is forgotten with it: the new address can be a
+     * different machine on an older build, and the next probe re-reads it. */
     suspend fun setServerUrl(context: Context, serverUrl: String) {
-        context.dataStore.edit { it[SERVER_URL] = serverUrl }
+        context.dataStore.edit {
+            it[SERVER_URL] = serverUrl
+            it.remove(APP_API)
+        }
     }
 
     fun treeUri(context: Context): Flow<String?> =
@@ -180,6 +224,32 @@ object Prefs {
         context.dataStore.edit { it[DYNAMIC_COLOR] = enabled }
     }
 
+    /** Simple or Full pinned on this device, or Auto (the default); see
+     * [resolveAppMode]. */
+    fun appModeChoice(context: Context): Flow<String> =
+        context.dataStore.data.map { it[APP_MODE] ?: AppModeChoice.AUTO }
+
+    suspend fun setAppModeChoice(context: Context, choice: String) {
+        context.dataStore.edit { it[APP_MODE] = choice }
+    }
+
+    /** The brand theme's key (BrandTheme.key); troubadour when never set. */
+    fun brandTheme(context: Context): Flow<String> =
+        context.dataStore.data.map { it[BRAND_THEME] ?: BrandTheme.DEFAULT.key }
+
+    suspend fun setBrandTheme(context: Context, key: String) {
+        context.dataStore.edit { it[BRAND_THEME] = key }
+    }
+
+    /** Whether the launcher icon follows the brand theme (LauncherIcon);
+     * off by default, so the icon stays Troubadour's. */
+    fun matchIconToTheme(context: Context): Flow<Boolean> =
+        context.dataStore.data.map { it[MATCH_ICON_TO_THEME] ?: false }
+
+    suspend fun setMatchIconToTheme(context: Context, enabled: Boolean) {
+        context.dataStore.edit { it[MATCH_ICON_TO_THEME] = enabled }
+    }
+
     // the artist-pictures setting moved to the device (web UI,
     // /api/device/info) — the old local pref is retired; its stored value
     // is simply ignored by this version.
@@ -205,7 +275,7 @@ object Prefs {
 
     // Raw JSON array of {"track_id":Long,"relative_path":String} — tracks
     // found missing locally during the last sync while behavior was "ask",
-    // still awaiting the user's decision. Surfaced on StatusScreen; cleared
+    // still awaiting the user's decision. Surfaced in the sync card in Settings; cleared
     // once resolved (or the next sync overwrites it with the current set).
     fun pendingMissingTracks(context: Context): Flow<String?> =
         context.dataStore.data.map { it[PENDING_MISSING_TRACKS] }

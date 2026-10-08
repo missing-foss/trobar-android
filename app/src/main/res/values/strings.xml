@@ -10,6 +10,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="internal_storage_prefix">Internal storage/</string>
 
     <string name="scan_qr_button">Scan QR code</string>
+    <string name="scan_qr_prompt">Place the pairing QR code inside the frame.</string>
+    <string name="import_qr_image_button">Import QR from an image</string>
+    <string name="qr_none_in_image">No pairing QR code found in this image.</string>
+    <string name="qr_not_a_pairing_code">This QR code is not a pairing code.</string>
     <string name="server_url_label">Server URL</string>
     <string name="token_label">Token</string>
     <string name="copy_error_button">Copy error</string>
@@ -55,12 +59,17 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
     <string name="settings_title">Settings</string>
     <string name="sync_in_progress">Sync in progress…</string>
+    <string name="sync_now_button">Sync now</string>
+    <string name="sync_indicator_waiting">The sync is waiting to start.</string>
+    <string name="sync_indicator_failed">The last sync failed. Details in Settings.</string>
+    <string name="sync_indicator_finished">Sync finished</string>
+    <string name="conn_indicator_unreachable">The server cannot be reached. Details in Settings.</string>
+    <string name="conn_indicator_unauthorized">The server no longer accepts this phone. Re-enroll in Settings.</string>
     <string name="recovery_scanning">Scanning your library…</string>
     <plurals name="recovery_files_scanned">
         <item quantity="one">%1$d file found</item>
         <item quantity="other">%1$d files found</item>
     </plurals>
-    <string name="tap_logo_to_sync">Tap the logo to sync</string>
     <string name="sync_progress_count">%1$d / %2$d</string>
     <string name="last_sync">Last sync: %1$s</string>
     <string name="never">never</string>
@@ -135,9 +144,22 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
     <string name="section_appearance">APPEARANCE</string>
     <string name="dynamic_color_label">Dynamic colors</string>
-    <string name="dynamic_color_description">Theme based on wallpaper</string>
+    <string name="dynamic_color_description">Wallpaper colours the app; the theme still colours the logo</string>
     <string name="language_label">Language</string>
     <string name="language_system">System</string>
+    <string name="app_mode_label">App mode</string>
+    <string name="brand_theme_label">Theme</string>
+    <string name="match_icon_label">Match app icon to theme</string>
+    <string name="match_icon_description">Changes when you leave the app. Some launchers then drop home-screen shortcuts or briefly hide the app</string>
+    <string name="brand_theme_troubadour">Default · cream</string>
+    <string name="brand_theme_nuech">Night · dark only</string>
+    <string name="brand_theme_garriga">Sage · olive</string>
+    <string name="brand_theme_peira">Stone · terracotta</string>
+    <string name="brand_theme_contraste">High contrast · dark only</string>
+    <string name="app_mode_auto">Auto: %1$s on this device</string>
+    <string name="app_mode_simple">Simple</string>
+    <string name="app_mode_full">Full</string>
+    <string name="app_mode_description">Simple shows only the sync and its settings. Full adds Home, Library and Playlists. Auto picks Simple on a device with no mobile network that is smaller than a tablet, such as a music player.</string>
 
     <string name="unpair_device_button">Unpair this device</string>
 
@@ -152,6 +174,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="download_failed">download failed</string>
     <string name="folder_creation_failed">could not create folder \'%1$s\'</string>
     <string name="track_error">%1$s: %2$s</string>
+    <string name="device_playlists_unreadable">a playlist file or folder in the sync folder couldn\'t be read, so none were sent this sync</string>
 
     <string name="notification_channel_name">Sync</string>
     <string name="notification_sync_progress">Sync: %1$d / %2$d</string>
@@ -168,7 +191,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="update_check_failed">Could not reach GitHub (%1$s) — try again later.</string>
     <string name="donate_button">Donate</string>
     <string name="about_links_section">Links</string>
-    <string name="about_documentation">Documentation</string>
+    <string name="about_documentation">Docs</string>
     <string name="about_source_code">Source code</string>
     <string name="about_report_issue">Report an issue or request a feature</string>
     <string name="about_releases">Releases</string>
@@ -179,11 +202,214 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="license_dialog_title">License (GPL-3.0-or-later)</string>
     <string name="notices_dialog_title">Third-party notices</string>
     <string name="close_button">Close</string>
+    <string name="info_about">About %1$s</string>
 
-    <!-- Easter egg: 5 taps on the About screen's bard -->
+    <!-- Easter egg: 5 taps on the About screen's mark -->
     <string name="tictactoe_title">Duel the bard</string>
     <string name="tictactoe_player_win">You\'ve bested the bard\'s tune!</string>
     <string name="tictactoe_bard_win">The bard\'s melody prevails.</string>
     <string name="tictactoe_draw">A well-matched duet — call it a draw.</string>
     <string name="tictactoe_play_again">Play again</string>
+
+    <!-- The navigation shell: three tabs, the basket destination, and the
+         placeholder the not-yet-built destinations show. -->
+    <string name="tab_home">Home</string>
+    <string name="tab_library">Library</string>
+    <string name="tab_playlists">Playlists</string>
+    <plurals name="playlists_count">
+        <item quantity="one">%1$d playlist</item>
+        <item quantity="other">%1$d playlists</item>
+    </plurals>
+    <string name="playlists_refresh">Refresh playlists</string>
+    <string name="playlists_syncing">Syncing…</string>
+    <string name="playlists_empty">No playlists yet. Refresh to read them from your music services.</string>
+    <string name="playlists_pick_one">Pick a playlist to see its tracks.</string>
+    <string name="playlists_shared_by">shared by %1$s</string>
+    <string name="playlists_availability">%1$d/%2$d tracks available locally (%3$d%%)</string>
+    <string name="playlists_unresolved">%1$d not matched locally</string>
+    <string name="playlists_unknown_source">Unknown source</string>
+    <string name="playlists_inferred_origin">Its tracks closely match a %1$s playlist — likely imported into Roon from there.</string>
+    <string name="playlists_synced">Synced %1$s</string>
+    <string name="playlists_never_synced">Not synced yet</string>
+    <string name="playlists_entry_unmatched">Not in the library</string>
+    <string name="playlists_untitled_entry">Untitled</string>
+    <string name="subs_title">Playlist subscriptions</string>
+    <string name="subs_add_label">Add a public playlist by link</string>
+    <string name="subs_add">Add</string>
+    <string name="subs_about">Public YouTube Music playlists only — no account and no sign-in. Trobar reads the playlist and matches its tracks against your own library.</string>
+    <string name="subs_privacy">Nothing is sent to YouTube and nothing is downloaded from it.</string>
+    <string name="subs_add_failed">Couldn\'t add that playlist.</string>
+    <string name="subs_unavailable">Unavailable — deleted, made private, or the link is wrong.</string>
+    <string name="subs_fetch_failed">Couldn\'t reach YouTube Music. Nothing already imported was changed.</string>
+    <string name="subs_no_matches">Fetched, but none of its tracks are in your library.</string>
+    <string name="subs_match_count">%1$d of %2$d tracks in your library</string>
+    <string name="subs_refresh">Refresh</string>
+    <string name="subs_remove">Remove</string>
+    <string name="subs_remove_confirm">Remove “%1$s” and the playlist it created?</string>
+    <string name="subs_empty">No subscriptions yet.</string>
+    <string name="share_target_label">Add to Trobar playlists</string>
+    <string name="sharing_shared">Shared</string>
+    <string name="sharing_private">Private</string>
+    <string name="sharing_shared_hint">Visible to everyone in the household.</string>
+    <string name="sharing_private_hint">Only visible to you (and the admin).</string>
+    <string name="sharing_make_private">Make private</string>
+    <string name="sharing_unshare_confirm">Make “%1$s” private? Anyone else who chose it, other than an admin, loses it: it leaves their selections, and its tracks are removed from their devices at their next sync.</string>
+    <string name="review_open">Review</string>
+    <string name="review_close">Close</string>
+    <string name="review_title">Not matched to your library</string>
+    <string name="review_help">These tracks in this playlist don\'t match anything in your library — streamed but never downloaded, a spelling mismatch, or genuinely missing. Exclude to acknowledge one as expected: it stops being flagged here (this doesn\'t change what syncs to a device).</string>
+    <string name="review_error">Couldn\'t load or save — try again.</string>
+    <string name="review_empty">Nothing to review.</string>
+    <string name="review_album_inferred">%1$s (from MusicBrainz)</string>
+    <string name="review_exclude">Exclude</string>
+    <string name="review_excluded">Excluded</string>
+    <string name="review_exclude_all">Exclude all</string>
+    <plurals name="review_exclude_all_confirm">
+        <item quantity="one">Exclude %1$d track from the review? It stops being flagged here; what syncs to a device does not change.</item>
+        <item quantity="other">Exclude all %1$d tracks from the review? They stop being flagged here; what syncs to a device does not change.</item>
+    </plurals>
+    <string name="lidarr_request_to">Request missing albums…</string>
+    <string name="lidarr_requesting">Requesting missing albums</string>
+    <string name="lidarr_off_hint">Request this playlist\'s missing albums from your configured Lidarr instance, monitor-only — Lidarr\'s own scheduled search finds them later.</string>
+    <string name="lidarr_on_hint">Missing albums are requested from Lidarr as new gaps appear.</string>
+    <string name="lidarr_not_configured">Lidarr requests aren\'t set up yet — ask an admin to configure a Lidarr connection in Administration.</string>
+    <string name="lidarr_nothing_missing">Nothing is missing from this playlist, so there is nothing to request.</string>
+    <string name="lidarr_no_album_data">This playlist\'s source doesn\'t provide album information for unresolved tracks, so nothing here can be requested.</string>
+    <string name="lidarr_last_run">Requested %1$d albums, last run %2$s</string>
+    <string name="lidarr_error_partial">An album was added to Lidarr but couldn\'t be put on the wanted list:</string>
+    <string name="lidarr_error_failed">Failed to request an album from Lidarr:</string>
+    <string name="basket_title">Basket</string>
+    <string name="header_destination">Sync to %1$s</string>
+    <string name="header_destination_current">Current destination</string>
+    <string name="placeholder_empty">Nothing here yet.</string>
+    <string name="app_api_too_old_title">Update the server to use this</string>
+    <string name="app_api_too_old_body">This screen needs the server\'s App API (level %1$d), which this server does not offer yet. Syncing keeps working as before.</string>
+    <string name="app_api_unreachable">Couldn\'t reach the server. Details in Settings.</string>
+    <string name="basket_empty">Nothing staged. Double-tap an album in the Library or on Home to add it for the device chosen at the top.</string>
+    <plurals name="basket_title_count">
+        <item quantity="one">Basket · %1$d item</item>
+        <item quantity="other">Basket · %1$d items</item>
+    </plurals>
+    <plurals name="basket_section_count">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <string name="basket_this_phone">this phone</string>
+    <string name="basket_send">Send</string>
+    <string name="basket_send_device">Send %1$s</string>
+    <string name="basket_sync_started">The sync has started.</string>
+    <string name="basket_show_sync">Show</string>
+    <string name="basket_clear">Clear</string>
+    <string name="basket_clear_confirm">Remove everything staged, for every device? Nothing already sent is affected.</string>
+    <string name="basket_clear_confirm_button">Clear basket</string>
+    <string name="basket_item_actions">Actions for %1$s</string>
+    <string name="basket_unstage_from">Remove from %1$s</string>
+    <string name="basket_remove_item">Remove from basket</string>
+    <string name="basket_item_missing">No longer exists on the server</string>
+    <string name="basket_type_album">album</string>
+    <string name="basket_type_artist">artist · all albums</string>
+    <string name="basket_type_playlist">playlist</string>
+    <string name="basket_type_track">track</string>
+    <string name="basket_footer">Sending a device sends its whole section. The basket is the same one you see in the browser.</string>
+    <plurals name="basket_sent">
+        <item quantity="one">Sent %1$d selection to %2$s.</item>
+        <item quantity="other">Sent %1$d selections to %2$s.</item>
+    </plurals>
+    <plurals name="basket_sent_skipped">
+        <item quantity="one">%1$d item could not be sent and stays in the basket.</item>
+        <item quantity="other">%1$d items could not be sent and stay in the basket.</item>
+    </plurals>
+    <string name="sync_blocked_offline">The sync will start once the phone is online.</string>
+    <string name="sync_blocked_needs_unmetered">The sync will start once the phone is on an unmetered connection, usually Wi-Fi (your Sync via setting).</string>
+    <string name="sync_blocked_roaming">The sync will start once the phone is no longer roaming (your Sync via setting).</string>
+    <string name="library_search_hint">Search artists and albums</string>
+    <plurals name="library_artists_count">
+        <item quantity="one">%1$d artist</item>
+        <item quantity="other">%1$d artists</item>
+    </plurals>
+    <plurals name="library_albums_count">
+        <item quantity="one">%1$d album</item>
+        <item quantity="other">%1$d albums</item>
+    </plurals>
+    <plurals name="library_tracks_count">
+        <item quantity="one">%1$d track</item>
+        <item quantity="other">%1$d tracks</item>
+    </plurals>
+    <string name="library_sort_name">Name</string>
+    <string name="library_sort_albums">Albums</string>
+    <string name="library_pick_an_artist">Pick an artist to see its albums.</string>
+    <string name="library_sync_entire_artist">Sync entire artist</string>
+    <string name="library_artist_in_basket">In the basket</string>
+    <string name="stage_action">Add to the basket</string>
+    <string name="stage_already_staged">Already in the basket for %1$s</string>
+    <string name="stage_no_destination">No device to add to yet</string>
+    <string name="library_similar">Similar artists in your library</string>
+    <string name="widget_library">Library</string>
+    <string name="widget_devices">Devices</string>
+    <string name="widget_suggestions">Suggestions</string>
+    <string name="widget_recently_added">Recently added</string>
+    <string name="widget_recently_released">Recently released</string>
+    <string name="widget_most_played">Most played</string>
+    <string name="widget_administration">Administration</string>
+    <string name="widget_admins_only">admins only</string>
+    <string name="widget_needs_history">Shown on Home once a Last.fm or ListenBrainz username is set up.</string>
+    <string name="widget_unavailable">Not available in the app yet. It keeps its place in your order.</string>
+    <string name="widget_failed">Could not load.</string>
+    <string name="dashboard_empty">Your dashboard is empty — every widget is turned off.</string>
+    <string name="dashboard_choose_widgets">Choose widgets</string>
+    <string name="widget_prefs_title">Home widgets</string>
+    <string name="widget_prefs_section_widgets">WIDGETS</string>
+    <string name="widget_prefs_intro">This device\'s own widgets, order and settings. Your dashboard in the browser keeps its own; a newly paired device starts from a copy of it.</string>
+    <string name="widget_move_up">Move %1$s up</string>
+    <string name="widget_move_down">Move %1$s down</string>
+    <string name="widget_remove">Remove %1$s</string>
+    <string name="widget_removed">Removed from Home: %1$s</string>
+    <string name="widget_undo">Undo</string>
+    <string name="widget_add">Add widget</string>
+    <string name="widget_add_title">Add to Home</string>
+    <string name="widget_prefs_empty">No widgets on Home.</string>
+    <string name="widget_covers">Covers</string>
+    <string name="widget_look_back">Look back</string>
+    <plurals name="widget_months">
+        <item quantity="one">%1$d month</item>
+        <item quantity="other">%1$d months</item>
+    </plurals>
+    <string name="widget_view_library">View library</string>
+    <string name="widget_within">within</string>
+    <string name="widget_nothing_recently_added">Nothing recently added.</string>
+    <string name="widget_nothing_recently_released">Nothing recently released.</string>
+    <string name="widget_no_suggestions">No suggestions yet.</string>
+    <plurals name="widget_hours_of_music">
+        <item quantity="one">%1$d hour of music</item>
+        <item quantity="other">%1$d hours of music</item>
+    </plurals>
+    <string name="widget_by_format">BY FORMAT</string>
+    <string name="widget_by_decade">BY DECADE</string>
+    <string name="widget_tracks_pct">tracks %</string>
+    <string name="widget_bytes_pct">storage %</string>
+    <string name="widget_no_devices">No devices yet.</string>
+    <string name="widget_device_owner">%1$s\'s</string>
+    <string name="widget_device_seen">seen %1$s</string>
+    <string name="widget_device_seen_never">never seen</string>
+    <plurals name="widget_device_pending">
+        <item quantity="one">%1$d track pending</item>
+        <item quantity="other">%1$d tracks pending</item>
+    </plurals>
+    <string name="widget_device_up_to_date">up to date</string>
+    <string name="widget_device_storage">%1$s GB of %2$s GB</string>
+    <string name="widget_device_storage_unknown">%1$s GB used · capacity not reported</string>
+    <string name="widget_no_plays">Nothing played in this period.</string>
+    <plurals name="widget_plays">
+        <item quantity="one">%1$d play</item>
+        <item quantity="other">%1$d plays</item>
+    </plurals>
+    <plurals name="widget_users">
+        <item quantity="one">%1$d user</item>
+        <item quantity="other">%1$d users</item>
+    </plurals>
+    <plurals name="widget_delegations">
+        <item quantity="one">%1$d active delegation</item>
+        <item quantity="other">%1$d active delegations</item>
+    </plurals>
+    <string name="widget_admin_manage_in_browser">Managing users and delegations is done in the browser.</string>
 </resources>

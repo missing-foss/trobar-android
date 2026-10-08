@@ -7,9 +7,16 @@
 
 package org.missing_foss.trobar
 
+import android.app.Instrumentation
+import android.content.IntentFilter
 import android.os.Build
+import android.provider.Settings
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -24,6 +31,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -50,7 +58,7 @@ class SettingsScreenTest {
         server.start()
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
-                """{"name": "Test Phone", "max_size_bytes": null, "device_type": "phone", "source_of_truth": "server"}""",
+                """{"name": "Test Phone", "max_size_bytes": null, "device_type": "phone", "source_of_truth": "server", "icon": "clickwheel"}""",
             ),
         )
         // Reset the DataStore prefs this test touches, so a prior run's
@@ -73,8 +81,7 @@ class SettingsScreenTest {
                 SettingsScreen(
                     pairing = Prefs.Pairing(serverUrl = server.url("/").toString(), token = "test-token"),
                     treeUri = dummyTreeUri,
-                    onBack = {},
-                    onOpenAbout = {},
+                    nav = SettingsNav(onOpenAbout = {}),
                     onServerUrlChanged = onServerUrlChanged,
                     onFolderChanged = {},
                     onUnpair = {},
@@ -82,6 +89,16 @@ class SettingsScreenTest {
             }
         }
     }
+
+    @Test
+    fun theDeviceTileDrawsThisDevicesOwnIcon() {
+        setScreen()
+        // Until the info arrives the tile draws a phone; then this device's own icon.
+        compose.waitUntil(timeoutMillis = 30_000) { drawn() == listOf("ic_device_clickwheel") }
+    }
+
+    private fun drawn(): List<String> = compose.onAllNodes(SemanticsMatcher.keyIsDefined(DeviceIconRes), useUnmergedTree = true)
+        .fetchSemanticsNodes().map { context.resources.getResourceEntryName(it.config[DeviceIconRes]) }
 
     @Test
     fun serverUrlEditFiresCallbackWithNewValue() {
@@ -97,12 +114,27 @@ class SettingsScreenTest {
     }
 
     @Test
+    fun serverUrlWithoutASchemeCannotBeSaved() {
+        var changedTo: String? = null
+        setScreen(onServerUrlChanged = { changedTo = it })
+
+        compose.onNodeWithText("Server").performClick()
+        compose.onNodeWithText("URL").performTextClearance()
+        compose.onNodeWithText("URL").performTextInput("myserver:8080")
+        compose.onNodeWithText("Save").assertIsNotEnabled()
+        compose.onNodeWithText("URL").performTextClearance()
+        compose.onNodeWithText("URL").performTextInput("https://myserver:8080")
+        compose.onNodeWithText("Save").assertIsEnabled()
+        assertNull(changedTo) // nothing stored until a valid address is saved
+    }
+
+    @Test
     fun missingFilePolicyPersistsToRealPrefs() {
         setScreen()
         compose.onNodeWithText("Locally deleted files").performClick()
         compose.onNodeWithText("Resync").performClick()
 
-        compose.waitUntil(timeoutMillis = 5_000) {
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) {
             runBlocking { Prefs.missingFileBehavior(context).first() } == Prefs.MISSING_ALWAYS_RESYNC
         }
         assertEquals(Prefs.MISSING_ALWAYS_RESYNC, runBlocking { Prefs.missingFileBehavior(context).first() })
@@ -123,10 +155,21 @@ class SettingsScreenTest {
         // or it silently lands nowhere.
         compose.onNodeWithTag("dynamic_color_switch").performScrollTo().performClick()
 
-        compose.waitUntil(timeoutMillis = 5_000) {
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) {
             runBlocking { Prefs.useDynamicColor(context).first() }
         }
         assertTrue(runBlocking { Prefs.useDynamicColor(context).first() })
+    }
+
+    @Test
+    fun matchIconToThemeTogglePersistsToRealPrefs() {
+        runBlocking { Prefs.setMatchIconToTheme(context, false) }
+        setScreen()
+        compose.onNodeWithTag("match_icon_switch").performScrollTo().performClick()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) {
+            runBlocking { Prefs.matchIconToTheme(context).first() }
+        }
+        runBlocking { Prefs.setMatchIconToTheme(context, false) }
     }
 
     @Test
@@ -138,9 +181,48 @@ class SettingsScreenTest {
 
         compose.onNodeWithTag("charging_idle_switch").performScrollTo().performClick()
 
-        compose.waitUntil(timeoutMillis = 5_000) {
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) {
             runBlocking { Prefs.requireChargingAndIdle(context).first() }
         }
         assertTrue(runBlocking { Prefs.requireChargingAndIdle(context).first() })
+    }
+
+    @Test
+    fun languageRowOpensTheSystemLanguagePageOnApi33() {
+        // API 33+: the per-app language is the system's. The row must hand
+        // over to the system page, not offer an in-app choice that the
+        // system never receives.
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        // Blocks the launch and counts it, so the test never leaves the app.
+        // The intent carries a package: URI, and a filter without a data
+        // scheme never matches an intent that has data.
+        val filter = IntentFilter(Settings.ACTION_APP_LOCALE_SETTINGS).apply { addDataScheme("package") }
+        val monitor = instrumentation.addMonitor(
+            filter,
+            Instrumentation.ActivityResult(0, null),
+            true,
+        )
+        try {
+            setScreen()
+            compose.onNodeWithText("Language").performScrollTo().performClick()
+            compose.waitUntil(timeoutMillis = UI_WAIT_MS) { monitor.hits == 1 }
+            assertEquals(0, compose.onAllNodesWithText("Français").fetchSemanticsNodes().size)
+        } finally {
+            instrumentation.removeMonitor(monitor)
+        }
+    }
+
+    @Test
+    fun languagePickerStoresTheChoiceBelowApi33() {
+        assumeTrue(Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU)
+        try {
+            setScreen()
+            compose.onNodeWithText("Language").performScrollTo().performClick()
+            compose.onNodeWithText("Français").performClick()
+            compose.waitUntil(timeoutMillis = UI_WAIT_MS) { AppLanguage.choice(context) == "fr" }
+        } finally {
+            AppLanguage.choose(context, AppLanguage.SYSTEM)
+        }
     }
 }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 missing-foss
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="200" android:viewportHeight="200">
+    <path android:fillColor="?attr/trobarDisc" android:pathData="M4,100a96,96 0 1,0 192,0a96,96 0 1,0 -192,0Z" />
+    <group android:name="star" android:pivotX="100" android:pivotY="100">
+        <path android:fillColor="?attr/trobarStar" android:pathData="M68,52L132,52A16,16 0 0,1 148,68L148,132A16,16 0 0,1 132,148L68,148A16,16 0 0,1 52,132L52,68A16,16 0 0,1 68,52Z" />
+        <path android:fillColor="?attr/trobarStar" android:pathData="M111.31,43.43L156.57,88.69A16,16 0 0,1 156.57,111.31L111.31,156.57A16,16 0 0,1 88.69,156.57L43.43,111.31A16,16 0 0,1 43.43,88.69L88.69,43.43A16,16 0 0,1 111.31,43.43Z" />
+    </group>
+    <path android:fillColor="?attr/trobarDisc" android:pathData="M66,100a34,34 0 1,0 68,0a34,34 0 1,0 -68,0Z" />
+    <path android:fillColor="?attr/trobarDot" android:pathData="M84,100a16,16 0 1,0 32,0a16,16 0 1,0 -32,0Z" />
+</vector>

@@ -8,7 +8,6 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.ServiceInfo
 import android.net.Uri
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.Constraints
@@ -31,7 +30,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /** Runs on WorkManager rather than a plain Activity-scoped coroutine —
@@ -80,7 +78,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
 
         // only ever non-empty when missingFileBehavior is "ask";
         // overwritten every run (not merged) so a batch the user already
-        // resolved via StatusScreen doesn't linger if this run found none.
+        // resolved from the sync card in Settings doesn't linger if this run found none.
         val missingJson = JSONArray().apply {
             result.missingTracks.forEach {
                 put(JSONObject().put("track_id", it.trackId).put("relative_path", it.relativePath))
@@ -92,7 +90,14 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         )
 
         storageStatsForTree(applicationContext, Uri.parse(treeUri))?.let { stats ->
-            try { api.reportStorage(stats.freeBytes, stats.totalBytes) } catch (ignored: Exception) { /* best-effort, not fatal */ }
+            // result.foreignBytes is null when the folder could not be
+            // measured this run, and is passed straight through as null --
+            // the server then keeps whatever it already had instead of
+            // being told the folder is empty. Not defaulted to 0 here, and
+            // that is the whole point of it being nullable.
+            try {
+                api.reportStorage(stats.freeBytes, stats.totalBytes, result.foreignBytes)
+            } catch (ignored: Exception) { /* best-effort, not fatal */ }
         }
 
         // #239/#81/#85: keep the local provenance DB current, then replay
@@ -106,7 +111,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             } catch (ignored: Exception) { /* best-effort — try again next sync */ }
         }
 
-        val currentLocale = AppCompatDelegate.getApplicationLocales().get(0) ?: Locale.getDefault()
+        val currentLocale = AppLanguage.locale(applicationContext)
         val timestamp = SimpleDateFormat("dd/MM HH:mm", currentLocale).format(Date())
         Prefs.recordSyncResult(applicationContext, timestamp, result.error)
         NotificationManagerCompat.from(applicationContext).cancel(NOTIFICATION_ID)
@@ -123,7 +128,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
     }
 
     companion object {
-        private const val PERIODIC_WORK_NAME = "trobar-periodic"
+        const val PERIODIC_WORK_NAME = "trobar-periodic"
         private const val PERIODIC_INTERVAL_HOURS = 6L
         const val MANUAL_WORK_NAME = "trobar-manual"
         const val KEY_IS_MANUAL = "is_manual"
@@ -149,21 +154,25 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             }
         }
 
-        private fun buildNotification(context: Context, done: Int, total: Int, scanning: Boolean): Notification {
+        /** The progress notification. Its text is in the app's language: on
+         * API 26-32 the worker's application context does not carry the
+         * in-app choice, so the strings come from AppLanguage.wrap(context). */
+        internal fun buildNotification(context: Context, done: Int, total: Int, scanning: Boolean): Notification {
+            val texts = AppLanguage.wrap(context)
             ensureNotificationChannel(context)
             val builder = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
                 .setContentTitle("Trobar")
                 // Status-bar icons render as pure alpha silhouettes — use the
-                // mono Bard cutout, not the full-colour launcher artwork.
+                // mono rosette cutout, not the full-colour launcher artwork.
                 .setSmallIcon(R.drawable.ic_notification)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
             when {
-                scanning -> builder.setContentText(context.getString(R.string.recovery_scanning))
+                scanning -> builder.setContentText(texts.getString(R.string.recovery_scanning))
                     .setProgress(0, 0, true)
-                total > 0 -> builder.setContentText(context.getString(R.string.notification_sync_progress, done, total))
+                total > 0 -> builder.setContentText(texts.getString(R.string.notification_sync_progress, done, total))
                     .setProgress(total, done, false)
-                else -> builder.setContentText(context.getString(R.string.sync_in_progress))
+                else -> builder.setContentText(texts.getString(R.string.sync_in_progress))
                     .setProgress(0, 0, true)
             }
             return builder.build()

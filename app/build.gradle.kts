@@ -23,8 +23,8 @@ android {
         applicationId = "org.missing_foss.trobar"
         minSdk = 26
         targetSdk = 34
-        versionCode = 49
-        versionName = "2.14.0"
+        versionCode = 50
+        versionName = "2.15.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // #61
     }
 
@@ -99,7 +99,10 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.core:core-ktx:1.19.0")
     implementation("androidx.activity:activity-compose:1.13.0")
-    implementation(platform("androidx.compose:compose-bom:2026.06.01"))
+    // The three-tab shell and its pushed destinations; replaces an eight-way
+    // `when` over booleans that had no back stack. Exact pin, Google Maven.
+    implementation("androidx.navigation:navigation-compose:2.10.1")
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material3:material3-window-size-class")
@@ -107,9 +110,43 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
+    // ProcessLifecycleOwner: the launcher icon changes when the app leaves the
+    // foreground. Already in the build transitively; declared for that use.
+    implementation("androidx.lifecycle:lifecycle-process:2.11.0")
+    // State holders for the App API screens (basket, library, dashboard):
+    // server state survives rotation and tab switches. Same family and
+    // version as the runtime above; approved by the maintainer on the
+    // client issue. Exact pin, Google Maven.
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
+    // Charts for the Home dashboard's library widget (by format, by decade).
+    // Chosen for being Compose-native with a Material 3 theme provider, so
+    // the colours follow the app's theme in dark mode and under dynamic
+    // colour; published on Maven Central, no extra repository. The
+    // charting dependency itself was approved by the maintainer on the
+    // epic. Exact pin; `compose` is its core and is pinned to the same
+    // version so a transitive bump cannot split them.
+    implementation("com.patrykandpatrick.vico:compose:3.3.1")
+    implementation("com.patrykandpatrick.vico:compose-m3:3.3.1")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
     implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("com.squareup.okhttp3:okhttp:5.4.0")
+    // Covers and artist pictures in the library and Home screens. Coil 3 on
+    // its OkHttp fetcher, so images ride the app's one shared client (and its
+    // credential interceptor) rather than a second HTTP stack; cache-control
+    // so the disk cache honours the server's max-age instead of keeping a
+    // cover forever. Exact pin, Maven Central, Apache-2.0.
+    implementation("io.coil-kt.coil3:coil-compose:3.6.3")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.6.3")
+    implementation("io.coil-kt.coil3:coil-network-cache-control:3.6.3")
+    constraints {
+        // work-runtime brings androidx.concurrent 1.1.0 into the app and the
+        // instrumented-test runner needs 1.2.0; the Android plugin holds the
+        // test classpath to the app's versions, so the two must agree. Coil's
+        // arrival (its profileinstaller asks for the same module) is what
+        // first made the disagreement fatal. Meet at 1.2.0 in the app.
+        implementation("androidx.concurrent:concurrent-futures:1.2.0")
+        implementation("androidx.concurrent:concurrent-futures-ktx:1.2.0")
+    }
     // org.json is part of the Android platform (bootclasspath, since API 1), so
     // JSONObject/JSONArray resolve without an explicit dependency. We deliberately
     // do NOT declare org.json:json — that artifact is under the GPL-incompatible
@@ -118,10 +155,18 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("androidx.documentfile:documentfile:1.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    // #21: warns sideloading users that Google's developer-verification
+    // requirement will stop this app working on certified devices. Pinned to an
+    // exact tag, NOT upstream's suggested `V1.+` — a floating coordinate from a
+    // build-on-demand repository decides at build time what ends up in a signed
+    // release. Resolves only from the narrowed JitPack entry in
+    // settings.gradle.kts. Its own appcompat floor is 1.5.1, below the 1.7.1
+    // above, so it adds no constraint of its own.
+    implementation("com.github.woheller69:FreeDroidWarn:V1.14")
 
     // #61: instrumented Compose UI tests — ./gradlew connectedAndroidTest (needs
     // a device/emulator). ui-test-manifest lets the harness host composables.
-    androidTestImplementation(platform("androidx.compose:compose-bom:2026.06.01"))
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

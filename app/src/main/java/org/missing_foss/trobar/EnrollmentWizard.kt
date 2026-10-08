@@ -4,6 +4,8 @@ package org.missing_foss.trobar
 
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -31,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -40,10 +43,10 @@ import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 
 /** #34/#162: enrollment wizard — the app's pairing flow. Scan the QR the web
- * UI shows (`{server_url, enroll_code}`) or enter the server URL + 8-char code
+ * UI shows (`{server_url, enroll_code}`), read it from an image (a
+ * screenshot, a picture someone sent), or enter the server URL + 8-char code
  * by hand, then name the device / set its space limit + audio format, and
  * redeem the code. On success the server has created a device and returned its
  * Bearer token, which we store via [onEnrolled] and use from then on. The SAF
@@ -62,16 +65,34 @@ fun EnrollmentWizard(onEnrolled: (String, String) -> Unit, initialServerUrl: Str
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    // A QR read by either route goes through parsePairingQr; one that is
+    // not a pairing QR says so instead of leaving the form as it was.
+    var qrMessage by remember { mutableStateOf<String?>(null) }
+    fun applyQr(qr: PairingQr?, notFound: Int) {
+        if (qr == null) {
+            qrMessage = context.getString(notFound)
+            return
+        }
+        serverUrl = qr.serverUrl
+        code = qr.code
+        qrMessage = null
+        error = null
+        showDetails = true
+    }
+
     val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        // No contents: the scan was cancelled, which needs no message.
         val raw = result.contents ?: return@rememberLauncherForActivityResult
-        try {
-            val json = JSONObject(raw)
-            serverUrl = json.getString("server_url")
-            code = json.optString("enroll_code").ifBlank { json.optString("code") }.trim().uppercase()
-            error = null
-            if (serverUrl.isNotBlank() && code.isNotBlank()) showDetails = true
-        } catch (ignored: Exception) {
-            // Not an enrollment QR — the user can still type the URL + code below.
+        applyQr(parsePairingQr(raw), R.string.qr_not_a_pairing_code)
+    }
+
+    // The system photo picker: no storage permission, and on API 26-29 it
+    // falls back to the document picker.
+    val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val text = withContext(Dispatchers.Default) { decodeQrFromImage(context, uri) }
+            applyQr(parsePairingQr(text), R.string.qr_none_in_image)
         }
     }
 
@@ -107,10 +128,25 @@ fun EnrollmentWizard(onEnrolled: (String, String) -> Unit, initialServerUrl: Str
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (!showDetails) {
+                QrButtons(
+                    onScan = {
+                        qrMessage = null
+                        // The prompt in the app's language: zxing's own screen is
+                        // another activity, which below API 33 never sees the
+                        // in-app language choice (AppLanguage).
+                        scanLauncher.launch(
+                            ScanOptions().setOrientationLocked(false).setPrompt(context.getString(R.string.scan_qr_prompt)),
+                        )
+                    },
+                    onImportImage = {
+                        qrMessage = null
+                        imageLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    },
+                    message = qrMessage,
+                )
                 ConnectStep(
                     serverUrl = serverUrl, onServerUrl = { serverUrl = it },
                     code = code, onCode = { code = it.trim().uppercase() },
-                    onScan = { scanLauncher.launch(ScanOptions().setOrientationLocked(false)) },
                     onContinue = { error = null; showDetails = true },
                 )
             } else {
@@ -124,19 +160,37 @@ fun EnrollmentWizard(onEnrolled: (String, String) -> Unit, initialServerUrl: Str
     }
 }
 
-/** Step 1: acquire the server URL + enrollment code (QR scan or manual entry). */
+/** Step 1, the QR routes: the camera, or a QR in an image. [message] says
+ * why the last QR read did not pair. */
+@Composable
+private fun QrButtons(onScan: () -> Unit, onImportImage: () -> Unit, message: String?) {
+    // Stacked, full width: neither label ever shares its row with the other.
+    Button(onClick = onScan, modifier = Modifier.fillMaxWidth()) {
+        Text(stringResource(R.string.scan_qr_button))
+    }
+    OutlinedButton(onClick = onImportImage, modifier = Modifier.fillMaxWidth()) {
+        Text(stringResource(R.string.import_qr_image_button))
+    }
+    message?.let {
+        Text(
+            it,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.testTag("qr_message"),
+        )
+    }
+}
+
+/** Step 1, by hand: the server URL + enrollment code. */
 @Composable
 private fun ColumnScope.ConnectStep(
     serverUrl: String,
     onServerUrl: (String) -> Unit,
     code: String,
     onCode: (String) -> Unit,
-    onScan: () -> Unit,
     onContinue: () -> Unit,
 ) {
-    Button(onClick = onScan, modifier = Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.scan_qr_button))
-    }
     Text(
         stringResource(R.string.enroll_or_manual),
         style = MaterialTheme.typography.labelMedium,
@@ -218,5 +272,3 @@ private fun ColumnScope.DetailsStep(
         onClick = onBack, enabled = !enrolling, modifier = Modifier.fillMaxWidth(),
     ) { Text(stringResource(R.string.enroll_back)) }
 }
-
-private const val BYTES_PER_GB = 1e9

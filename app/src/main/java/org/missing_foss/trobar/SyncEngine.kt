@@ -20,9 +20,15 @@ import java.util.concurrent.atomic.AtomicReference
 data class SyncResult(
     val downloaded: Int, val deleted: Int, val failed: Int, val error: String? = null,
     // only ever populated when missingFileBehavior is "ask": the
-    // caller (SyncWorker) persists these for StatusScreen to surface, since
+    // caller (SyncWorker) persists these for the sync card in Settings to surface, since
     // this run deliberately didn't act on them itself.
     val missingTracks: List<TrackRef> = emptyList(),
+    // Bytes of music in the sync folder that Trobar did not put there --
+    // what the server's size limit is a limit on, alongside our own files.
+    // NULL MEANS NOT MEASURED, never zero: a folder nobody could read and
+    // an empty one are different claims, and the caller must not flatten
+    // them by defaulting this to 0 on the way out.
+    val foreignBytes: Long? = null,
 )
 // #40: `scanning` marks the recovery SAF tree-walk phase (before the first
 // pull), where `done` is a running count of audio files seen and `total` is 0
@@ -51,7 +57,11 @@ object SyncEngine {
 
     // Only these (audio) files map to library tracks the manifest can match —
     // playlists (.m3u8), artist/cover art (.jpg) and .nomedia are skipped.
-    private val AUDIO_EXTENSIONS = setOf("flac", "mp3", "m4a", "ogg", "opus", "wav", "aac", "alac")
+    // One definition, shared with the folder scan that measures what the
+    // server's size limit is a limit on -- two copies would drift, and the
+    // disagreement would surface as a budget that is quietly wrong rather
+    // than as an error.
+    private val AUDIO_EXTENSIONS = AUDIO_FILE_EXTENSIONS
 
     suspend fun run(
         context: Context,
@@ -178,6 +188,9 @@ object SyncEngine {
             firstError.compareAndSet(null, context.getString(R.string.track_error, "playlists", e.message))
         }
 
+        // After the write above, so this reads the folder as it now stands.
+        uploadDevicePlaylists(context, api, treeUri, firstError)
+
         // Best-effort, decorative — walks every artist folder currently on
         // device (not just ones touched this run) so a picture backfills
         // for artists synced before this feature existed too. A missing or
@@ -194,7 +207,47 @@ object SyncEngine {
             }
         }
 
-        SyncResult(downloaded.get(), deleted.get(), failed.get(), firstError.get(), reportedMissing)
+        SyncResult(downloaded.get(), deleted.get(), failed.get(), firstError.get(), reportedMissing,
+            measureForeignBytes(context, treeUri, changes))
+    }
+
+    /** Playlists a person made in the folder go to the server, every sync,
+     * the whole set: one missing from a later upload is removed there. A
+     * failure is reported through [firstError] but never fails the sync. */
+    private fun uploadDevicePlaylists(
+        context: Context, api: ApiClient, treeUri: Uri, firstError: AtomicReference<String?>,
+    ) {
+        try {
+            val found = collectDevicePlaylists(context, treeUri)
+            if (found == null) {
+                firstError.compareAndSet(null, context.getString(R.string.device_playlists_unreadable))
+                return
+            }
+            api.postDevicePlaylists(found)
+        } catch (e: Exception) {
+            firstError.compareAndSet(null, context.getString(R.string.track_error, "device playlists", e.message))
+        }
+    }
+
+    /** Bytes in the sync folder that are not ours, or null if the folder
+     * could not be measured.
+     *
+     * Called LAST, after this run's own downloads and deletions have
+     * landed, so the figure describes the folder as it now is rather than
+     * as it was when the run started. `changes` names everything the server
+     * wants here -- already downloaded plus queued -- so anything else in
+     * the tree is by definition not ours.
+     *
+     * Null on any failure, never 0. An unmeasurable folder must not be
+     * reported as an empty one, and a throw here would fail a sync that has
+     * otherwise already succeeded -- never the right trade for a number
+     * that only improves a budget. */
+    private fun measureForeignBytes(context: Context, treeUri: Uri, changes: Changes): Long? = try {
+        val managed = (changes.downloaded + changes.toDownload)
+            .mapTo(HashSet()) { it.relativePath }
+        scanForeignAudio(context, treeUri, managed)?.foreignBytes
+    } catch (ignored: Exception) {
+        null
     }
 
     /** Creates or removes an empty ".nomedia" marker at the sync folder's
@@ -386,7 +439,7 @@ object SyncEngine {
         }
     } catch (ignored: Exception) { null }
 
-    private fun writePlaylists(context: Context, root: DocumentFile, playlists: List<PlaylistRef>) {
+    internal fun writePlaylists(context: Context, root: DocumentFile, playlists: List<PlaylistRef>) {
         val expected = playlists.map { it.filename }.toSet()
         val rootFiles = root.listFiles().associateBy { it.name ?: "" }
         for (pl in playlists) {
@@ -396,6 +449,9 @@ object SyncEngine {
                     context.contentResolver.openInputStream(existing.uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
                 } catch (ignored: Exception) { null }
                 if (current == pl.content) continue
+                // A playlist the person made, under the same name: theirs
+                // stays, and the Trobar one isn't written this sync.
+                if (current != null && parseDevicePlaylist(current.toByteArray(Charsets.UTF_8)) != null) continue
                 existing.delete()
             }
             // application/octet-stream: ExternalStorageProvider keeps the

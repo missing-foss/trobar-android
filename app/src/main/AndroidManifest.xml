@@ -23,15 +23,92 @@ SPDX-License-Identifier: GPL-3.0-or-later
         android:localeConfig="@xml/locales_config"
         android:usesCleartextTraffic="false">
 
+        <!-- The launcher entry is one of the Launcher* aliases below, not
+             this activity: one alias per brand theme, exactly one enabled
+             (LauncherIcon). -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name">
+            android:label="@string/app_name" />
+
+        <activity-alias
+            android:name=".LauncherTroubadour"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher_troubadour"
+            android:roundIcon="@mipmap/ic_launcher_troubadour"
+            android:enabled="true"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherNuech"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher_nuech"
+            android:roundIcon="@mipmap/ic_launcher_nuech"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherGarriga"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher_garriga"
+            android:roundIcon="@mipmap/ic_launcher_garriga"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherPeira"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher_peira"
+            android:roundIcon="@mipmap/ic_launcher_peira"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherContraste"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher_contraste"
+            android:roundIcon="@mipmap/ic_launcher_contraste"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- In the share sheet under its own name: a link shared from another
+             app opens the playlist subscriptions with it in the field. -->
+        <activity-alias
+            android:name=".AddPlaylistLink"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:label="@string/share_target_label">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity-alias>
 
         <activity
             android:name="com.journeyapps.barcodescanner.CaptureActivity"

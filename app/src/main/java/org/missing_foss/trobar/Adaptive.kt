@@ -19,8 +19,12 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.max
 
 // #38: the current window's size classes, computed once in MainActivity and
 // read anywhere via these locals — so screens adapt without each re-measuring.
@@ -31,10 +35,57 @@ val LocalWindowHeightSizeClass = staticCompositionLocalOf { WindowHeightSizeClas
  * bigger windows instead of stretching edge to edge. */
 val CONTENT_MAX_WIDTH = 560.dp
 
+/** The narrowest an album cover gets in a cover grid once there is room
+ * for more than three a row: about a phone's cover, so a tablet's grid
+ * gains columns instead of growing each cover to the width of a third. */
+val MIN_COVER_WIDTH = 140.dp
+private const val MIN_COVER_COLUMNS = 3
+
+/** How many covers a row of a cover grid holds in [available] width, with
+ * [spacing] between them: three on a phone, however narrow, and more on a
+ * wider window, each at least [MIN_COVER_WIDTH]. */
+fun coverColumns(available: Dp, spacing: Dp): Int =
+    max(MIN_COVER_COLUMNS, ((available + spacing) / (MIN_COVER_WIDTH + spacing)).toInt())
+
 /** True on a phone-width window (< 600dp) — content fills the width. On Medium/
  * Expanded (tablets, unfolded foldables, landscape phones) it's capped. */
 @Composable
 fun isCompactWidth(): Boolean = LocalWindowWidthSizeClass.current == WindowWidthSizeClass.Compact
+
+/**
+ * A label beside its controls while the label's longest word fits in the width
+ * the controls leave, and above them, with the controls at the end, once it
+ * would not.
+ *
+ * A Row measures fixed-size controls first and hands the label what is left,
+ * even with `weight(1f)` on the label: at a large font scale on a narrow phone
+ * that is a few characters, and words break mid-way. A label's minimum
+ * intrinsic width is its longest word, so this is exactly the point at which
+ * side by side stops being readable.
+ */
+@Composable
+fun LabelBesideControls(label: @Composable () -> Unit, controls: @Composable () -> Unit, modifier: Modifier = Modifier) {
+    Layout(contents = listOf(label, controls), modifier = modifier) { (labelPart, controlsPart), constraints ->
+        val width = constraints.maxWidth
+        val placedControls = controlsPart.single().measure(Constraints(maxWidth = width))
+        val labelMeasurable = labelPart.single()
+        val beside = width - placedControls.width
+        if (labelMeasurable.minIntrinsicWidth(Constraints.Infinity) <= beside) {
+            val placedLabel = labelMeasurable.measure(Constraints.fixedWidth(beside))
+            val height = maxOf(placedLabel.height, placedControls.height)
+            layout(width, height) {
+                placedLabel.placeRelative(0, (height - placedLabel.height) / 2)
+                placedControls.placeRelative(beside, (height - placedControls.height) / 2)
+            }
+        } else {
+            val placedLabel = labelMeasurable.measure(Constraints(maxWidth = width))
+            layout(width, placedLabel.height + placedControls.height) {
+                placedLabel.placeRelative(0, 0)
+                placedControls.placeRelative(width - placedControls.width, placedLabel.height)
+            }
+        }
+    }
+}
 
 /** True on a short viewport (a landscape phone) — hero headers shrink so they
  * don't dominate the little vertical space there is. */

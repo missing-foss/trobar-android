@@ -18,6 +18,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -129,6 +130,25 @@ class PrefsTest {
 
             assertTrue(state is Prefs.PairingState.Paired)
             assertEquals("real-token", (state as Prefs.PairingState.Paired).pairing.token)
+        }
+    }
+
+    @Test
+    fun aNewPairingForgetsTheRecordedAppApiLevel() {
+        runBlocking {
+            Prefs.setAppApi(context, 1)
+            assertEquals(1, Prefs.appApi(context).first())
+            // Pairing again may be a different server; its level is unknown
+            // until its first probe answers.
+            Prefs.setPairing(context, "http://example.invalid/", "new-token")
+            assertNull(Prefs.appApi(context).first())
+            Prefs.setAppApi(context, 1)
+            Prefs.clearPairing(context)
+            assertNull(Prefs.appApi(context).first())
+            // A new address alone can be a different machine on an older build.
+            Prefs.setAppApi(context, 1)
+            Prefs.setServerUrl(context, "http://other.invalid/")
+            assertNull(Prefs.appApi(context).first())
         }
     }
 }

@@ -15,6 +15,23 @@ naming:
     # pattern to accept both cases rather than fighting an official
     # first-party naming convention.
     functionPattern: '[a-zA-Z][a-zA-Z0-9]*'
+  PackageNaming:
+    # Widened by exactly one character: the default pattern admits no
+    # underscore, and this project's package is org.missing_foss.trobar.
+    #
+    # The alternative -- renaming the package -- is not a tidy-up and must
+    # not be reached for as one. `namespace` and `applicationId` in
+    # app/build.gradle.kts both derive from it, and Android identifies an
+    # installed app by its applicationId: changing it does not produce a new
+    # version of Trobar, it produces a different app that cannot upgrade over
+    # the installed one. Every existing install would have to be removed by
+    # hand, losing its enrollment and its synced state.
+    #
+    # So the underscore stays and the pattern accommodates it. Only the
+    # character class inside a dotted segment changes; the shape of the rule
+    # (lowercase first letter, dot-separated) is still enforced, so a package
+    # that is genuinely misnamed still fails.
+    packagePattern: '[a-z]+(\.[a-z][A-Za-z0-9_]*)*'
 
 style:
   MagicNumber:
@@ -62,12 +79,16 @@ complexity:
   # inherently branchy) — new code that's more complex than that still
   # fails the build. Not a substitute for the real refactor these two big
   # screens (SettingsScreen, StatusScreen) would benefit from eventually.
+  # The three big screens moved out of MainActivity.kt into their own files
+  # when the navigation shell arrived; the exclusion follows them. They were
+  # not grown by the move, and the note above about the refactor they would
+  # benefit from still stands.
   LongMethod:
     threshold: 85
-    excludes: ['**/MainActivity.kt']
+    excludes: ['**/MainActivity.kt', '**/StatusScreen.kt', '**/SettingsScreen.kt', '**/AboutScreen.kt']
   CyclomaticComplexMethod:
     threshold: 30
-    excludes: ['**/MainActivity.kt']
+    excludes: ['**/MainActivity.kt', '**/StatusScreen.kt', '**/SettingsScreen.kt', '**/AboutScreen.kt']
   NestedBlockDepth:
     # downloadOne/writePlaylists/storageStatsFromRootsQuery's IO-retry and
     # SAF-traversal nesting; default 4 is tuned for flatter business logic.

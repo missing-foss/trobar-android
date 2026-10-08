@@ -3,7 +3,6 @@
 package org.missing_foss.trobar
 
 import android.content.Context
-import androidx.appcompat.app.AppCompatDelegate
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -27,8 +26,12 @@ data class PlaylistRef(val name: String, val filename: String, val content: Stri
  * offer Re-enroll instead of Retry. Subclasses IOException so existing broad
  * catches keep working. */
 class UnauthorizedException(message: String) : IOException(message)
+/** `appApi` is the server's App API level (0 when the server predates it,
+ * or sends anything but a number for it) -- the capability the Home and
+ * Library tabs are gated on. */
 data class DeviceInfo(val name: String, val maxSizeBytes: Long?, val deviceType: String,
-                      val artistImages: String? = null, val sourceOfTruth: String = "server")
+                      val artistImages: String? = null, val sourceOfTruth: String = "server",
+                      val appApi: Int = 0, val icon: String? = null)
 /** #34 recovery: how many uploaded device paths the server matched against its
  * library (marked downloaded) vs didn't recognize. */
 data class ManifestResult(val matched: Int, val unmatched: Int)
@@ -55,10 +58,9 @@ data class ProvenancePushResult(val received: Int, val stored: Int, val pending:
  * can't follow an HTML login redirect). */
 class ApiClient(context: Context, private val serverUrl: String, private val token: String) {
     private val appContext = context.applicationContext
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .build()
+    // The app's one client (TrobarHttp): timeouts live there now, and the
+    // image loader shares its pool.
+    private val client = TrobarHttp.client
 
     private fun baseUrl() = serverUrl.trimEnd('/')
 
@@ -68,7 +70,7 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
     // so Accept-Language is the only signal it has for which language to
     // reply in. Reflects the same locale the app's own UI is currently
     // showing (explicit override, or the system locale under "System").
-    private fun currentLanguageTag(): String = appLanguageTag()
+    private fun currentLanguageTag(): String = appLanguageTag(appContext)
 
     private fun authed(url: String): Request.Builder =
         Request.Builder().url(url)
@@ -78,21 +80,7 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
     /** The server now returns {"error": "..."} on device-API failures
      * (see device_api_error_json in main.py) — surface that text directly
      * (e.g. in a Snackbar) instead of a bare "info HTTP 401". */
-    private fun errorMessage(resp: Response, default: String): String {
-        val parsed = try {
-            resp.body?.string()?.let { JSONObject(it).optString("error") }
-        } catch (ignored: Exception) { null }
-        return parsed?.takeIf { it.isNotBlank() } ?: default
-    }
-
-    private fun requireSuccess(resp: Response, action: String) {
-        // #34: a 401 means the token was rejected (e.g. the server was
-        // reinstalled clean and no longer knows this device) — distinct from a
-        // network error so the UI can offer Re-enroll rather than Retry.
-        if (resp.code == HTTP_UNAUTHORIZED) throw UnauthorizedException(
-            errorMessage(resp, appContext.getString(R.string.api_error_generic, action, resp.code)))
-        if (!resp.isSuccessful) throw IOException(errorMessage(resp, appContext.getString(R.string.api_error_generic, action, resp.code)))
-    }
+    private fun requireSuccess(resp: Response, action: String) = requireSuccess(appContext, resp, action)
 
     /** This device's own registered identity (name + configured storage
      * limit), as set in the web UI's Profil > Appareils list — the app
@@ -105,7 +93,9 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
             val max = if (json.isNull("max_size_bytes")) null else json.optLong("max_size_bytes")
             val artistImages = if (json.isNull("artist_images")) null else json.optString("artist_images")
             return DeviceInfo(json.optString("name", "?"), max, json.optString("device_type", "phone"),
-                              artistImages, json.optString("source_of_truth", "server"))
+                              artistImages, json.optString("source_of_truth", "server"),
+                              appApi = (json.opt("app_api") as? Number)?.toInt() ?: 0,
+                              icon = if (json.isNull("icon")) null else json.optString("icon"))
         }
     }
 
@@ -135,11 +125,39 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
         }
     }
 
+    /** The playlists a person made in the sync folder (see
+     * collectDevicePlaylists), the whole set found this sync; the server
+     * makes each one a playlist of the device's owner and removes one
+     * missing from a later upload. Returns the count the server recorded,
+     * or null when the server predates this (404), so a newer app on an
+     * older server just carries on. */
+    fun postDevicePlaylists(playlists: List<DevicePlaylist>): Int? {
+        val items = JSONArray()
+        for (pl in playlists) items.put(JSONObject().put("path", pl.path).put("entries", JSONArray(pl.entries)))
+        val body = JSONObject().put("playlists", items).toString().toRequestBody("application/json".toMediaType())
+        val req = authed("${baseUrl()}/api/device/playlists").post(body).build()
+        client.newCall(req).execute().use { resp ->
+            if (resp.code == HTTP_NOT_FOUND) return null
+            requireSuccess(resp, "playlists")
+            return JSONObject(resp.body?.string() ?: "{}").optInt("playlists")
+        }
+    }
+
     /** Reports this device's actual free + total space (see
      * StorageUtils.kt) so the web UI can flag a configured limit that
-     * doesn't physically fit, and show overall device storage usage. */
-    fun reportStorage(freeBytes: Long, totalBytes: Long) {
+     * doesn't physically fit, and show overall device storage usage.
+     *
+     * `foreignBytes` is the music in the sync folder that Trobar did not
+     * put there, and it is OMITTED FROM THE BODY when null rather than
+     * sent as 0. The server treats an absent field as "this client did not
+     * measure it" and leaves whatever it had; a zero would be a
+     * measurement claiming the folder holds nothing but ours. Every caller
+     * that cannot measure -- an older build, a revoked tree permission, a
+     * scan that threw -- must reach this with null and not with a
+     * default. */
+    fun reportStorage(freeBytes: Long, totalBytes: Long, foreignBytes: Long? = null) {
         val json = JSONObject().put("free_bytes", freeBytes).put("total_bytes", totalBytes)
+        if (foreignBytes != null) json.put("foreign_bytes", foreignBytes)
         val body = json.toString().toRequestBody("application/json".toMediaType())
         val req = authed("${baseUrl()}/api/device/storage").post(body).build()
         client.newCall(req).execute().use { resp -> requireSuccess(resp, "storage") }
@@ -260,7 +278,7 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
         if (resumeFromByte > 0) builder.header("Range", "bytes=$resumeFromByte-")
         val resp = client.newCall(builder.build()).execute()
         if (!resp.isSuccessful) {
-            val message = errorMessage(resp, appContext.getString(R.string.api_error_file, trackId, resp.code))
+            val message = responseErrorMessage(resp, appContext.getString(R.string.api_error_file, trackId, resp.code))
             resp.close()
             throw IOException(message)
         }
@@ -294,9 +312,6 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
     }
 
     companion object {
-        private const val CONNECT_TIMEOUT_SECONDS = 15L
-        private const val READ_TIMEOUT_SECONDS = 60L
-        private const val HTTP_UNAUTHORIZED = 401
         private const val FINGERPRINT_PAGE_DEFAULT = 200
         // #239/#85: matches the server's own _PROVENANCE_PUSH_MAX
         // (main.py) — sending more than this in one POST is a 400, not a
@@ -305,14 +320,11 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
     }
 }
 
-/** The app UI's current language (explicit override, else the system locale)
+/** The app UI's current language (explicit choice, else the system locale)
  * as a bare language tag — the only locale signal the token-less device API
  * has, since it carries no cookie/session. Shared by [ApiClient.authed] and the
  * pre-pairing [redeemEnrollment] below. */
-internal fun appLanguageTag(): String {
-    val locales = AppCompatDelegate.getApplicationLocales()
-    return if (!locales.isEmpty) (locales[0]?.language ?: "en") else java.util.Locale.getDefault().language
-}
+internal fun appLanguageTag(context: Context): String = AppLanguage.tag(context)
 
 /** #34/#162: the outcome of redeeming an enrollment code — the server created
  * a device for us and handed back its Bearer token. */
@@ -347,7 +359,7 @@ fun redeemEnrollment(
         .build()
     val req = Request.Builder()
         .url(serverUrl.trimEnd('/') + "/api/enrollment/redeem")
-        .header("Accept-Language", appLanguageTag())
+        .header("Accept-Language", appLanguageTag(context))
         .post(body)
         .build()
     client.newCall(req).execute().use { resp ->
@@ -365,3 +377,27 @@ fun redeemEnrollment(
 }
 
 private const val ENROLL_TIMEOUT_SECONDS = 30L
+
+
+private const val HTTP_UNAUTHORIZED = 401
+private const val HTTP_NOT_FOUND = 404
+
+/** The server returns {"error": "..."} on API failures (device_api_error_json
+ * in main.py) -- surface that text directly (e.g. in a Snackbar) instead of
+ * a bare "info HTTP 401". Shared by the device-API and App API clients. */
+internal fun responseErrorMessage(resp: Response, default: String): String {
+    val parsed = try {
+        resp.body?.string()?.let { JSONObject(it).optString("error") }
+    } catch (ignored: Exception) { null }
+    return parsed?.takeIf { it.isNotBlank() } ?: default
+}
+
+/** #34: a 401 means the token was rejected (e.g. the server was reinstalled
+ * clean and no longer knows this device) -- distinct from a network error so
+ * the UI can offer Re-enroll rather than Retry. Everything else unsuccessful
+ * is an IOException carrying the server's own message. */
+internal fun requireSuccess(context: Context, resp: Response, action: String) {
+    val default = context.getString(R.string.api_error_generic, action, resp.code)
+    if (resp.code == HTTP_UNAUTHORIZED) throw UnauthorizedException(responseErrorMessage(resp, default))
+    if (!resp.isSuccessful) throw IOException(responseErrorMessage(resp, default))
+}

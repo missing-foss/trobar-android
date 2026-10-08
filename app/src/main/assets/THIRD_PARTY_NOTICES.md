@@ -8,12 +8,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 Trobar redistributes the third-party components listed below — bundled fonts, the
 vendored web front-end libraries, the Android app's compiled
-dependencies, and the server's Python runtime dependencies. Each is provided
+dependencies, the server's Python runtime dependencies, the playlist
+provider glyphs, and the device glyphs. Each is provided
 under its own license, reproduced here. Trobar's own code is under the license in
 the repository's `LICENSE` file; nothing below changes that.
 
-The full text of each distinct license (SIL OFL 1.1, MIT, and Apache License 2.0)
-appears once, at the end, after the component inventory.
+The full text of each distinct license (SIL OFL 1.1, MIT, Apache License 2.0 and
+ISC) appears once, at the end, after the component inventory. The provider
+glyphs' other two licenses, CC0 1.0 and CC BY 4.0, are linked in section 5.
 
 ---
 
@@ -57,23 +59,40 @@ below.
 The released APK statically links the libraries below, all under the Apache
 License 2.0. (`org.json` is intentionally not bundled — its `JSONObject`/`JSONArray`
 classes resolve against the Android platform instead of the GPL-incompatible
-JSON-licensed artifact; see `app/build.gradle.kts` and #28.)
+JSON-licensed artifact; see `app/build.gradle.kts`.)
 
 ### Apache License 2.0
 
 - **AndroidX** (`androidx.appcompat`, `androidx.core:core-ktx`,
-  `androidx.activity:activity-compose`, `androidx.compose.*` [BOM 2026.06.01:
+  `androidx.activity:activity-compose`, `androidx.compose.*` [BOM 2026.09.00:
   ui, material3, material3-window-size-class, material-icons-core,
   material-icons-extended, ui-tooling-preview],
-  `androidx.lifecycle:lifecycle-runtime-ktx`, `androidx.work:work-runtime-ktx`,
-  `androidx.datastore:datastore-preferences`, `androidx.documentfile`) —
+  `androidx.lifecycle:lifecycle-runtime-ktx`,
+  `androidx.lifecycle:lifecycle-viewmodel-compose`, `androidx.work:work-runtime-ktx`,
+  `androidx.datastore:datastore-preferences`, `androidx.documentfile`,
+  `androidx.navigation:navigation-compose`) —
   Copyright (C) The Android Open Source Project
 - **OkHttp** 5.4.0 (`com.squareup.okhttp3:okhttp`) — Copyright (C) Square, Inc.
+- **Vico** 3.3.1 (`com.patrykandpatrick.vico:compose`, `com.patrykandpatrick.vico:compose-m3`) —
+  Copyright (C) Patryk Goworowski and Patrick Michalik. Draws the library
+  widget's charts.
+- **Coil** 3.6.3 (`io.coil-kt.coil3:coil-compose`, `coil-network-okhttp`,
+  `coil-network-cache-control`) — Copyright (C) Coil Contributors. Loads album
+  covers and artist pictures.
 - **ZXing Android Embedded** 4.3.0 (`com.journeyapps:zxing-android-embedded`) —
   Copyright (C) Journey Mobile, Inc.; incorporates ZXing —
   Copyright (C) The ZXing Authors
 - **kotlinx.coroutines** 1.11.0 (`org.jetbrains.kotlinx:kotlinx-coroutines-android`)
   — Copyright (C) JetBrains s.r.o.
+- **FreeDroidWarn** V1.14 (`com.github.woheller69:FreeDroidWarn`) — Copyright (C)
+  woheller69. Shows the notice about Google's developer-verification
+  requirement. It supplies its own dialog strings and translations, so the text
+  a user reads there is upstream's rather than Trobar's — including a sentence
+  stating, on this project's behalf, that its developers do not accept the
+  requirement. Two of its three buttons leave the app: **Details** opens
+  `keepandroidopen.org`, and **Solution** (red) opens the library's own README
+  at its `#solutions` anchor. **OK** opens nothing and dismisses the notice
+  until the next version.
 
 See [Apache License 2.0](#apache-license-version-20) below.
 
@@ -96,6 +115,38 @@ the Docker image:
 
 Full BSD-3-Clause / MIT / Apache-2.0 texts are as reproduced below (BSD-3-Clause
 is the standard three-clause text carried in each package's own distribution).
+
+---
+
+## 5. Android app — playlist provider glyphs
+
+The glyph beside a playlist that says which service it comes from is the same
+mark the web UI shows, converted to an Android vector drawable
+(`app/src/main/res/drawable/ic_provider_*.xml`). Each file names its source.
+
+| Glyphs | Source | License |
+|--------|--------|---------|
+| Roon, Jellyfin, Emby, Plex, Tidal, Spotify, YouTube Music | [Simple Icons](https://simpleicons.org) | [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/) |
+| Navidrome (for Subsonic), Lyrion Music Server, Music Assistant | [selfh.st/icons](https://github.com/selfhst/icons), by selfh.st | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); converted from SVG to a vector drawable, otherwise unchanged |
+| Folder (for Filesystem), and the music note for an unknown source | [Lucide](https://lucide.dev) | ISC — see [ISC License](#isc-license) below |
+
+The brand glyphs depict third-party trademarks, used only to indicate which
+service a playlist comes from. The trademarks remain the property of their
+respective owners, and no affiliation or endorsement is implied.
+
+---
+
+## 6. Android app — device glyphs
+
+The picture beside a device is the same one the web UI draws for it,
+converted to an Android vector drawable
+(`app/src/main/res/drawable/ic_device_*.xml`). Each file names its source.
+
+| Glyphs | Source | License |
+|--------|--------|---------|
+| Phone, cassette, headphones, watch, USB stick, folder | [Lucide](https://lucide.dev) | ISC — see [ISC License](#isc-license) below |
+| SD card | [Tabler Icons](https://tabler.io/icons), Copyright (c) 2020-2024 Paweł Kuna | MIT — see [MIT License](#mit-license) below |
+| Phone with a button, tablet, small tablet, player with a click wheel, player with buttons | Trobar's own drawings | GPL-3.0-or-later, as the rest of the app |
 
 ---
 ---
@@ -425,3 +476,23 @@ SOFTWARE.
    See the License for the specific language governing permissions and
    limitations under the License.
 ```
+
+## ISC License
+
+ISC License
+
+Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part
+of Feather (MIT). All other copyright (c) for Lucide are held by Lucide
+Contributors 2022.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.

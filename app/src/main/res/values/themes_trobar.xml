@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 missing-foss
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<!-- Apply one overlay on top of the app theme (or via ContextThemeWrapper). The mark and wordmark drawables read these attrs. -->
+<resources>
+    <!-- Troubadour — Default · cream -->
+    <style name="ThemeOverlay.Trobar.Troubadour" parent="">
+        <item name="trobarGround">@color/trobar_troubadour_ground</item>
+        <item name="trobarDisc">@color/trobar_troubadour_disc</item>
+        <item name="trobarStar">@color/trobar_troubadour_star</item>
+        <item name="trobarDot">@color/trobar_troubadour_dot</item>
+        <item name="trobarText">@color/trobar_troubadour_text</item>
+        <item name="trobarAccent">@color/trobar_troubadour_accent</item>
+    </style>
+    <!-- Nuèch — Night · OLED -->
+    <style name="ThemeOverlay.Trobar.Nuech" parent="">
+        <item name="trobarGround">@color/trobar_nuech_ground</item>
+        <item name="trobarDisc">@color/trobar_nuech_disc</item>
+        <item name="trobarStar">@color/trobar_nuech_star</item>
+        <item name="trobarDot">@color/trobar_nuech_dot</item>
+        <item name="trobarText">@color/trobar_nuech_text</item>
+        <item name="trobarAccent">@color/trobar_nuech_accent</item>
+    </style>
+    <!-- Garriga — Sage · olive -->
+    <style name="ThemeOverlay.Trobar.Garriga" parent="">
+        <item name="trobarGround">@color/trobar_garriga_ground</item>
+        <item name="trobarDisc">@color/trobar_garriga_disc</item>
+        <item name="trobarStar">@color/trobar_garriga_star</item>
+        <item name="trobarDot">@color/trobar_garriga_dot</item>
+        <item name="trobarText">@color/trobar_garriga_text</item>
+        <item name="trobarAccent">@color/trobar_garriga_accent</item>
+    </style>
+    <!-- Pèira — Stone · terracotta -->
+    <style name="ThemeOverlay.Trobar.Peira" parent="">
+        <item name="trobarGround">@color/trobar_peira_ground</item>
+        <item name="trobarDisc">@color/trobar_peira_disc</item>
+        <item name="trobarStar">@color/trobar_peira_star</item>
+        <item name="trobarDot">@color/trobar_peira_dot</item>
+        <item name="trobarText">@color/trobar_peira_text</item>
+        <item name="trobarAccent">@color/trobar_peira_accent</item>
+    </style>
+    <!-- Contraste — High contrast · MIP -->
+    <style name="ThemeOverlay.Trobar.Contraste" parent="">
+        <item name="trobarGround">@color/trobar_contraste_ground</item>
+        <item name="trobarDisc">@color/trobar_contraste_disc</item>
+        <item name="trobarStar">@color/trobar_contraste_star</item>
+        <item name="trobarDot">@color/trobar_contraste_dot</item>
+        <item name="trobarText">@color/trobar_contraste_text</item>
+        <item name="trobarAccent">@color/trobar_contraste_accent</item>
+    </style>
+</resources>

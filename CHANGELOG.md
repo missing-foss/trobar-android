@@ -75,6 +75,8 @@ trobar-server 2.17.0. The Home widgets leaving out this phone's albums, public
 Tidal links and choosing Artist images need 2.18.0. With an older server, those
 parts keep their 2.15.0 behaviour or say the server needs updating.
 
+This is the first release built with R8 shrinking: the APK is about 4 MB instead of 17 MB, with nothing removed.
+
 ## [2.15.0]
 
 Needs Trobar server 2.16.0 for the Playlists tab (App API level 2). With an older

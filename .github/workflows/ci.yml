@@ -10,15 +10,29 @@ on:
   push:
     branches: [main]
   pull_request:
-  # release.yml runs this whole gate, the emulator job included, on the
-  # tagged commit before it opens the draft release.
+  # release.yml calls this twice on the tagged commit: once with
+  # skip-instrumented for the gates the draft waits for, and once with
+  # only-instrumented for the emulator suite, which runs and reports there
+  # but does not hold the draft back (see release.yml).
   workflow_call:
+    inputs:
+      skip-instrumented:
+        description: "Run everything but the emulator suite."
+        type: boolean
+        default: false
+      only-instrumented:
+        description: "Run only the emulator suite."
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   build:
+    # On a push or pull request there are no inputs, and a missing input
+    # compares unequal to true, so both jobs run there as before.
+    if: ${{ inputs.only-instrumented != true }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -114,8 +128,11 @@ jobs:
   # runner image (Ubuntu's Android Command Line Tools), just not the
   # emulator package or a system image, which is what this job fetches.
   instrumented-tests:
+    if: ${{ inputs.skip-instrumented != true }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The suite took about 24 minutes on the hosted runner, so 30 cut a
+    # release run off before it finished.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # The JDK is the one .tool-versions pins, as on the forge, so the two

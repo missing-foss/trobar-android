@@ -41,6 +41,19 @@ class LauncherIconTest {
         LauncherIcon.show(context, BrandTheme.DEFAULT)
     }
 
+    /** Shows [theme]'s icon with the setting saying the same. The app
+     * applies the stored setting each time it leaves the foreground, about
+     * 700 ms after its last activity stops, so an icon shown against the
+     * setting is put back while the test is still using it: the alias it
+     * just enabled is disabled and never resolves again. */
+    private fun showAsTheSettingWould(theme: BrandTheme) {
+        runBlocking {
+            Prefs.setBrandTheme(context, theme.key)
+            Prefs.setMatchIconToTheme(context, true)
+        }
+        LauncherIcon.show(context, theme)
+    }
+
     /** The package's launcher entries, as the launcher sees them. */
     private fun launcherEntries(): List<String> =
         pm.queryIntentActivities(
@@ -66,7 +79,7 @@ class LauncherIconTest {
     @Test
     fun eachThemeLeavesOneLauncherEntryAndItOpensTheApp() {
         for (theme in BrandTheme.entries) {
-            LauncherIcon.show(context, theme)
+            showAsTheSettingWould(theme)
             assertEquals("$theme", listOf(aliasName(theme)), launcherEntries())
             launchWhenResolvable(viaAlias(theme)).use { scenario ->
                 assertEquals("$theme opens", Lifecycle.State.RESUMED, scenario.state)
@@ -83,7 +96,7 @@ class LauncherIconTest {
     fun disablingTheAliasInUseClosesTheOpenApp() {
         assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
         launchWhenResolvable(viaAlias(BrandTheme.TROUBADOUR)).use { scenario ->
-            LauncherIcon.show(context, BrandTheme.GARRIGA)
+            showAsTheSettingWould(BrandTheme.GARRIGA)
             waitFor { scenario.state == Lifecycle.State.DESTROYED }
         }
     }
@@ -119,7 +132,7 @@ class LauncherIconTest {
         assertEquals(listOf(aliasName(BrandTheme.TROUBADOUR)), launcherEntries())
         val enabler = Thread {
             Thread.sleep(ENABLE_LATER_MS)
-            LauncherIcon.show(context, BrandTheme.PEIRA)
+            showAsTheSettingWould(BrandTheme.PEIRA)
         }.apply { start() }
         try {
             launchWhenResolvable(viaAlias(BrandTheme.PEIRA)).use { scenario ->

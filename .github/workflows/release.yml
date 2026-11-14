@@ -21,8 +21,17 @@
 # finish and publish. Nothing is public until a human publishes it.
 #
 # Modelled on trobar-server's release workflow: the gates job calls ci.yml
-# (workflow_call), so the draft waits for the same build, lint, static
-# analysis and emulator tests a pull request runs.
+# (workflow_call), so the draft waits for the same build, unit tests, lint,
+# static analysis and guards a pull request runs.
+#
+# THE EMULATOR SUITE DOES NOT BLOCK THE DRAFT, FOR NOW. It runs on every
+# release, in its own job, and a failure there turns this run red, but
+# draft-release does not wait for it. It had not passed on GitHub's runner on
+# any release push yet; its known failures are tests, not the app, which is
+# checked on a phone before every release. It becomes blocking again, by
+# folding it back into gates, once it is green on GitHub on two release or
+# mirror pushes in a row. The release request that decided this has the
+# details.
 name: release
 on:
   push:
@@ -71,6 +80,15 @@ jobs:
   gates:
     needs: [version-check]
     uses: ./.github/workflows/ci.yml
+    with:
+      skip-instrumented: true
+
+  # Runs and reports; nothing below needs it (see the top of this file).
+  instrumented:
+    needs: [version-check]
+    uses: ./.github/workflows/ci.yml
+    with:
+      only-instrumented: true
 
   draft-release:
     needs: [version-check, gates]

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -31,7 +29,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -40,7 +37,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -56,19 +52,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.testTag
-import kotlin.random.Random
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.json.JSONObject
 
+// Every Trobar project's donation link.
+const val SUPPORT_URL = "https://ko-fi.com/missingfoss"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AboutScreen(onBack: () -> Unit) {
+fun AboutScreen(
+    onBack: () -> Unit,
+    // How a link opens: the browser by default. A test passes its own to see
+    // where a button goes without leaving the app.
+    onOpenUrl: ((String) -> Unit)? = null,
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var checking by remember { mutableStateOf(false) }
@@ -83,6 +84,7 @@ fun AboutScreen(onBack: () -> Unit) {
     var showTicTacToe by remember { mutableStateOf(false) }
 
     fun openUrl(url: String) {
+        if (onOpenUrl != null) return onOpenUrl(url)
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         } catch (ignored: Exception) { /* no browser — nothing sensible to do */ }
@@ -199,7 +201,7 @@ fun AboutScreen(onBack: () -> Unit) {
             )
 
             // Stacked, not side by side: beside the update button, which takes
-            // the width it needs first, Donate was crushed in French. Both as
+            // the width it needs first, the support button was crushed in French. Both as
             // wide as the wider label, so they read as a pair.
             Column(
                 Modifier.width(IntrinsicSize.Max),
@@ -211,19 +213,21 @@ fun AboutScreen(onBack: () -> Unit) {
                 ) {
                     Text(stringResource(R.string.check_updates_button), textAlign = TextAlign.Center)
                 }
-                // Liberapay's brand yellow — a vendored "button", no external
-                // widget script (a deliberate no-CDN choice).
-                val liberapayYellow = Color(0xFFF6C915)
-                val liberapayInk = Color(0xFF1A171B)
+                // In the app's own theme: no Ko-fi logo, image or colour.
                 Button(
-                    onClick = { openUrl("https://liberapay.com/Trobar/donate") },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = liberapayYellow, contentColor = liberapayInk),
+                    onClick = { openUrl(SUPPORT_URL) },
                     modifier = Modifier.fillMaxWidth().testTag("donate"),
                 ) {
-                    Text(stringResource(R.string.donate_button), textAlign = TextAlign.Center)
+                    Text(stringResource(R.string.support_button), textAlign = TextAlign.Center)
                 }
             }
+            Text(
+                stringResource(R.string.support_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.testTag("support_note"),
+            )
             updateStatus?.let {
                 Text(
                     it,
@@ -264,146 +268,6 @@ fun AboutScreen(onBack: () -> Unit) {
                 }
             }
         }
-        }
-    }
-}
-
-/** Easter egg (5 taps on the mark, About screen). Human plays one note
- * glyph, the bard answers with the other one, rather than plain X/O. The
- * bard plays to win-or-block first, otherwise centre/corner/edge — beatable on purpose
- * (see the issue: "doesn't need to be unbeatable"), not a minimax grind. */
-internal enum class TttMark { NONE, PLAYER, BARD }
-
-internal val TTT_LINES = listOf(
-    listOf(0, 1, 2), listOf(3, 4, 5), listOf(6, 7, 8), // rows
-    listOf(0, 3, 6), listOf(1, 4, 7), listOf(2, 5, 8), // columns
-    listOf(0, 4, 8), listOf(2, 4, 6),                  // diagonals
-)
-
-internal fun tttWinner(board: List<TttMark>): TttMark? {
-    for ((a, b, c) in TTT_LINES) {
-        if (board[a] != TttMark.NONE && board[a] == board[b] && board[a] == board[c]) return board[a]
-    }
-    return null
-}
-
-/** Never misses an outright win (that would just feel broken) — but
- * blocking and positioning are deliberately imperfect, a musician playing
- * by ear rather than a calculator. A strict win/block/centre-corner-edge
- * heuristic (the first version of this) is *technically* beatable, but
- * only via a specific forcing sequence (opposite corners, then a fork) a
- * casual player has no reason to know — in ordinary play it draws or wins
- * essentially every time, which isn't the "doesn't need to be unbeatable"
- * the issue asked for. So: only a 70% chance to block a real threat, and
- * a genuinely random cell (not the strong centre-first preference) when
- * there's no win or block to make — real, frequent openings to win
- * without needing to already know the trick. */
-internal fun bardMove(board: List<TttMark>): List<TttMark> {
-    val empty = board.indices.filter { board[it] == TttMark.NONE }
-    fun wouldWin(i: Int, mark: TttMark): Boolean {
-        val trial = board.toMutableList()
-        trial[i] = mark
-        return tttWinner(trial) == mark
-    }
-    val move = empty.firstOrNull { wouldWin(it, TttMark.BARD) }
-        ?: (if (Random.nextInt(10) < 7) empty.firstOrNull { wouldWin(it, TttMark.PLAYER) } else null)
-        ?: empty.random()
-    val result = board.toMutableList()
-    result[move] = TttMark.BARD
-    return result
-}
-
-@Composable
-internal fun TicTacToeDialog(onDismiss: () -> Unit) {
-    var board by remember { mutableStateOf(List(TTT_BOARD_SIZE) { TttMark.NONE }) }
-    var result by remember { mutableStateOf<TttMark?>(null) } // null = still playing; NONE = draw
-
-    fun reset() {
-        board = List(TTT_BOARD_SIZE) { TttMark.NONE }
-        result = null
-    }
-
-    fun playerTap(i: Int) {
-        if (result != null || board[i] != TttMark.NONE) return
-        var next = board.toMutableList().also { it[i] = TttMark.PLAYER }
-        val playerWin = tttWinner(next)
-        if (playerWin != null) {
-            board = next; result = playerWin
-            return
-        }
-        if (next.none { it == TttMark.NONE }) {
-            board = next; result = TttMark.NONE
-            return
-        }
-        next = bardMove(next).toMutableList()
-        board = next
-        result = tttWinner(next) ?: if (next.none { it == TttMark.NONE }) TttMark.NONE else null
-    }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    stringResource(R.string.tictactoe_title),
-                    fontFamily = FredokaFamily,
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                // #38: a roomier board on tablets / unfolded foldables.
-                val cell = if (isCompactWidth()) 64.dp else 88.dp
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    for (row in 0..2) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            for (col in 0..2) {
-                                val i = row * 3 + col
-                                Surface(
-                                    modifier = Modifier
-                                        .width(cell)
-                                        .aspectRatio(1f)
-                                        .clickable { playerTap(i) },
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                ) {
-                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                        Text(
-                                            when (board[i]) {
-                                                TttMark.PLAYER -> "♪" // ♪
-                                                TttMark.BARD -> "♫"   // ♫
-                                                TttMark.NONE -> ""
-                                            },
-                                            style = MaterialTheme.typography.headlineMedium,
-                                            color = MaterialTheme.colorScheme.secondary,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                result?.let {
-                    Text(
-                        stringResource(
-                            when (it) {
-                                TttMark.PLAYER -> R.string.tictactoe_player_win
-                                TttMark.BARD -> R.string.tictactoe_bard_win
-                                TttMark.NONE -> R.string.tictactoe_draw
-                            }
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.outline,
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (result != null) {
-                        OutlinedButton(onClick = { reset() }) { Text(stringResource(R.string.tictactoe_play_again)) }
-                    }
-                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.close_button)) }
-                }
-            }
         }
     }
 }

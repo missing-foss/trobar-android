@@ -30,6 +30,22 @@ import android.database.sqlite.SQLiteOpenHelper
 class ProvenanceStore(context: Context) :
     SQLiteOpenHelper(context.applicationContext, DB_NAME, null, DB_VERSION) {
 
+    // The walk's bookkeeping between syncs: the highest fingerprint_seq seen
+    // (the next walk asks only for newer ones) and when the last full walk
+    // ran (see syncProvenanceFingerprints). Kept beside the database, wiped
+    // with it.
+    private val meta = context.applicationContext.getSharedPreferences(META_NAME, Context.MODE_PRIVATE)
+
+    var highWaterSeq: Long?
+        get() = if (meta.contains(KEY_HIGH_WATER)) meta.getLong(KEY_HIGH_WATER, 0) else null
+        set(value) {
+            meta.edit().apply { if (value == null) remove(KEY_HIGH_WATER) else putLong(KEY_HIGH_WATER, value) }.apply()
+        }
+
+    var lastFullWalkAt: Long
+        get() = meta.getLong(KEY_LAST_FULL_WALK, 0)
+        set(value) = meta.edit().putLong(KEY_LAST_FULL_WALK, value).apply()
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE provenance (" +
@@ -55,8 +71,49 @@ class ProvenanceStore(context: Context) :
      * changed, so a no-op refetch (the common case — the server has no
      * "since" filter, so every sync re-walks the whole cursor) doesn't
      * re-queue an already-acknowledged row for push loop. */
-    fun upsert(trackId: Long, path: String, fingerprint: String) {
+    fun upsert(trackId: Long, path: String, fingerprint: String) = upsertIn(writableDatabase, trackId, path, fingerprint)
+
+    /** Every entry of one page in one transaction: one disk sync per page
+     * rather than one per row. */
+    fun upsertAll(entries: List<FingerprintEntry>) {
+        if (entries.isEmpty()) return
         val db = writableDatabase
+        db.beginTransaction()
+        try {
+            for (e in entries) upsertIn(db, e.trackId, e.path, e.fingerprint)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** Deletes the rows of tracks not in [keep]: tracks no longer on the
+     * device. Returns how many went. */
+    fun prune(keep: Set<Long>): Int {
+        val db = writableDatabase
+        val gone = db.rawQuery("SELECT track_id FROM provenance", null).use { c ->
+            buildList { while (c.moveToNext()) c.getLong(0).takeUnless { it in keep }?.let(::add) }
+        }
+        if (gone.isEmpty()) return 0
+        db.beginTransaction()
+        try {
+            val stmt = db.compileStatement("DELETE FROM provenance WHERE track_id = ?")
+            for (id in gone) {
+                stmt.bindLong(1, id)
+                stmt.executeUpdateDelete()
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return gone.size
+    }
+
+    fun trackIds(): Set<Long> = readableDatabase.rawQuery("SELECT track_id FROM provenance", null).use { c ->
+        buildSet { while (c.moveToNext()) add(c.getLong(0)) }
+    }
+
+    private fun upsertIn(db: SQLiteDatabase, trackId: Long, path: String, fingerprint: String) {
         val existing = db.rawQuery(
             "SELECT path, fingerprint, pushed FROM provenance WHERE track_id = ?",
             arrayOf(trackId.toString()),
@@ -107,29 +164,51 @@ class ProvenanceStore(context: Context) :
     private companion object {
         const val DB_NAME = "provenance.db"
         const val DB_VERSION = 1
+        const val META_NAME = "provenance_meta"
+        const val KEY_HIGH_WATER = "high_water_seq"
+        const val KEY_LAST_FULL_WALK = "last_full_walk_at"
     }
 }
 
-/** #239/#81: walks every page of this device's server-computed
- * fingerprints (oldest track_id first) and upserts them into [store].
- * Not incremental across calls — the endpoint has no "since" filter, only
- * a cursor position, so every sync re-walks from after=0 — but each page
- * is capped and cheap (no audio decode on either end), same order of cost
- * as one getChanges() call per few hundred tracks.
+/** How often the walk starts over from the first track instead of asking
+ * only for newer fingerprints: a track's on-device path can change (a
+ * re-delivery under a new layout) without its fingerprint changing, and
+ * only a full walk sees that, and sees which tracks have left. */
+internal const val FULL_WALK_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000
+
+/** Brings [store] up to date with this device's server-computed
+ * fingerprints, oldest track_id first, a page per transaction.
+ *
+ * Normally incremental: only fingerprints computed after the highest
+ * fingerprint_seq the store has seen. A full walk (no high-water mark yet,
+ * or [FULL_WALK_INTERVAL_MS] since the last one) re-reads every row and
+ * deletes the rows of tracks the server no longer lists for this device.
  *
  * Throws (same convention as every other ApiClient-backed call in this
- * app) — the caller decides what a mid-walk failure means for the sync
- * result; see SyncWorker, which treats this as best-effort and swallows
- * it rather than failing the overall sync. */
-suspend fun syncProvenanceFingerprints(api: ApiClient, store: ProvenanceStore) {
+ * app); the caller decides what a mid-walk failure means. A walk that
+ * fails partway records nothing, so the next one covers the same ground. */
+suspend fun syncProvenanceFingerprints(
+    api: ApiClient, store: ProvenanceStore, now: Long = System.currentTimeMillis(),
+) {
+    val since = store.highWaterSeq
+    val full = since == null || now - store.lastFullWalkAt >= FULL_WALK_INTERVAL_MS
+    val seen = HashSet<Long>()
+    var highest = since
     var after = 0L
     while (true) {
-        val page = api.getFingerprintsPage(after)
+        val page = api.getFingerprintsPage(after, computedAfter = if (full) null else since)
+        store.upsertAll(page.entries)
         for (entry in page.entries) {
-            store.upsert(entry.trackId, entry.path, entry.fingerprint)
+            seen.add(entry.trackId)
+            entry.seq?.let { seq -> if (highest == null || seq > highest!!) highest = seq }
         }
         after = page.nextAfter ?: break
     }
+    if (full) {
+        store.prune(seen)
+        store.lastFullWalkAt = now
+    }
+    store.highWaterSeq = highest
 }
 
 /** #85: replays this device's not-yet-acknowledged provenance rows back to

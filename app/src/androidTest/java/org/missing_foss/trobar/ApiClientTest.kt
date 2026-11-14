@@ -50,7 +50,8 @@ class ApiClientTest {
                 {
                   "to_download": [
                     {"track_id": 1, "relative_path": "Artist/Album/01 - Song.flac", "size": 12345},
-                    {"track_id": 2, "relative_path": "Artist/Album/02 - Other.mp3", "size": 999, "transcode": true}
+                    {"track_id": 2, "relative_path": "Artist/Album/02 - Other.mp3", "size": 999, "transcode": true,
+                     "estimated_size": 400}
                   ],
                   "to_delete": [
                     {"track_id": 3, "relative_path": "Old/Track.flac"}
@@ -74,6 +75,8 @@ class ApiClientTest {
         assertEquals(12345L, changes.toDownload[0].size)
         assertFalse(changes.toDownload[0].transcode) // absent in JSON -> defaults false
         assertTrue(changes.toDownload[1].transcode) // present and true in JSON
+        assertNull(changes.toDownload[0].estimatedSize) // absent: an older server
+        assertEquals(400L, changes.toDownload[1].estimatedSize)
 
         assertEquals(1, changes.toDelete.size)
         assertEquals(3L, changes.toDelete[0].trackId)
@@ -141,6 +144,19 @@ class ApiClientTest {
         } catch (e: java.io.IOException) {
             assertEquals(expected, e.message)
         }
+    }
+
+    @Test
+    fun theStorageReportCarriesTheReserveOnlyWhenThereIsOne() {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
+        api.reportStorage(freeBytes = 1, totalBytes = 2, reserveBytes = 5)
+        api.reportStorage(freeBytes = 1, totalBytes = 2)
+        val first = org.json.JSONObject(server.takeRequest().body.readUtf8())
+        assertEquals(5L, first.getLong("reserve_bytes"))
+        assertFalse(first.has("foreign_bytes"))
+        // Absent, not zero: the server keeps what it had.
+        assertFalse(org.json.JSONObject(server.takeRequest().body.readUtf8()).has("reserve_bytes"))
     }
 
     @Test

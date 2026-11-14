@@ -1,0 +1,247 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "Version bumps for the pins nobody would otherwise refresh: the Gradle plugins and libraries, the Gradle wrapper, the Java toolchain in .tool-versions and the workflow actions.",
+    "Renovate opens one pull request per group, weekly, and stops; review, CI and the merge desk take it from there like any other.",
+    "minimumReleaseAge is the cool-down: nothing younger than three days is proposed."
+  ],
+  "extends": [
+    "config:recommended"
+  ],
+  "timezone": "Europe/Zurich",
+  "schedule": [
+    "* 0-5 * * 3"
+  ],
+  "minimumReleaseAge": "3 days",
+  "minimumReleaseAgeBehaviour": "timestamp-optional",
+  "enabledManagers": [
+    "gradle",
+    "gradle-wrapper",
+    "asdf",
+    "github-actions",
+    "custom.regex"
+  ],
+  "pinDigests": true,
+  "automerge": false,
+  "rebaseWhen": "behind-base-branch",
+  "packageRules": [
+    {
+      "matchManagers": [
+        "gradle"
+      ],
+      "groupName": "Gradle dependencies"
+    },
+    {
+      "description": "Vico's -next.N versions are prereleases of the coming minor, and Renovate's Maven versioning doesn't treat -next as unstable. Stable releases only.",
+      "matchPackageNames": [
+        "/^com\\.patrykandpatrick\\.vico:/"
+      ],
+      "allowedVersions": "!/-next\\./"
+    },
+    {
+      "matchManagers": [
+        "gradle-wrapper"
+      ],
+      "groupName": "Gradle wrapper"
+    },
+    {
+      "matchManagers": [
+        "asdf"
+      ],
+      "groupName": "Java toolchain"
+    },
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "workflow actions"
+    },
+    {
+      "description": "The manifest's surface versions move in the same pull request as the build file's.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "groupName": "Gradle dependencies"
+    },
+    {
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDepNames": [
+        "gradle"
+      ],
+      "groupName": "Gradle wrapper"
+    },
+    {
+      "description": "The Java version is pinned twice, in .tool-versions and in the GitHub CI's setup-java, and dev/verify.sh requires the two to agree: one group, so a Java major moves both in one pull request.",
+      "matchDepNames": [
+        "java",
+        "java-jdk"
+      ],
+      "groupName": "Java toolchain"
+    },
+    {
+      "description": "The build JDK stays on 17: detekt rejects a JVM target above 22, so a newer major breaks the gate. A JDK major is taken on purpose, by raising this hold, not from a weekly group.",
+      "matchDepNames": [
+        "java",
+        "java-jdk"
+      ],
+      "allowedVersions": "/^17([.+]|$)/"
+    },
+    {
+      "description": "AGP stays on 9.3.x: on 9.5.0, connectedDebugAndroidTest ran zero tests and still passed when adb runs on a non-default port, which is how every instrumented run here is made, and CI does not run that suite to notice. Raise this hold only with a run showing the suite's test count on that setup.",
+      "matchDepNames": [
+        "com.android.application"
+      ],
+      "allowedVersions": "/^9\\.3\\./"
+    },
+    {
+      "description": "Workflows outside .github run on the forge's runner, which is not GitHub: a newer action major can need a newer node than it has. Digest refreshes only there.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchFileNames": [
+        "!.github/workflows/**"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/(^|/)upstreams\\.yml$/"
+      ],
+      "matchStrings": [
+        "AGP (?<currentValue>\\d+\\.\\d+\\.\\d+) \\(com\\.android\\.application\\)"
+      ],
+      "depNameTemplate": "com.android.application",
+      "packageNameTemplate": "com.android.application:com.android.application.gradle.plugin",
+      "datasourceTemplate": "maven",
+      "registryUrlTemplate": "https://dl.google.com/android/maven2/",
+      "description": "The dependency desk's manifest (upstreams.yml) names these versions in its surface lines, and a bump must update them in the same pull request. Each manager reads one, under the same name, package and datasource the gradle manager extracts, so it lands in the same group and moves with the build file."
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/(^|/)upstreams\\.yml$/"
+      ],
+      "matchStrings": [
+        "Compose BOM (?<currentValue>\\d{4}\\.\\d{2}\\.\\d{2})"
+      ],
+      "depNameTemplate": "androidx.compose:compose-bom",
+      "packageNameTemplate": "androidx.compose:compose-bom",
+      "datasourceTemplate": "maven",
+      "registryUrlTemplate": "https://dl.google.com/android/maven2/"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/(^|/)upstreams\\.yml$/"
+      ],
+      "matchStrings": [
+        "navigation-compose (?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "androidx.navigation:navigation-compose",
+      "packageNameTemplate": "androidx.navigation:navigation-compose",
+      "datasourceTemplate": "maven",
+      "registryUrlTemplate": "https://dl.google.com/android/maven2/"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/(^|/)upstreams\\.yml$/"
+      ],
+      "matchStrings": [
+        "lifecycle (?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "androidx.lifecycle:lifecycle-runtime-ktx",
+      "packageNameTemplate": "androidx.lifecycle:lifecycle-runtime-ktx",
+      "datasourceTemplate": "maven",
+      "registryUrlTemplate": "https://dl.google.com/android/maven2/"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/(^|/)upstreams\\.yml$/"
+      ],
+      "matchStrings": [
+        "work-runtime-ktx (?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "androidx.work:work-runtime-ktx",
+      "packageNameTemplate": "androidx.work:work-runtime-ktx",
+      "datasourceTemplate": "maven",
+      "registryUrlTemplate": "https://dl.google.com/android/maven2/"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/(^|/)upstreams\\.yml$/"
+      ],
+      "matchStrings": [
+        "datastore-preferences (?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "androidx.datastore:datastore-preferences",
+      "packageNameTemplate": "androidx.datastore:datastore-preferences",
+      "datasourceTemplate": "maven",
+      "registryUrlTemplate": "https://dl.google.com/android/maven2/"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/(^|/)upstreams\\.yml$/"
+      ],
+      "matchStrings": [
+        "documentfile (?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "androidx.documentfile:documentfile",
+      "packageNameTemplate": "androidx.documentfile:documentfile",
+      "datasourceTemplate": "maven",
+      "registryUrlTemplate": "https://dl.google.com/android/maven2/"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/(^|/)upstreams\\.yml$/"
+      ],
+      "matchStrings": [
+        "plugin (?<currentValue>\\d+\\.\\d+\\.\\d+) \\(org\\.jetbrains\\.kotlin\\.plugin\\.compose\\)"
+      ],
+      "depNameTemplate": "org.jetbrains.kotlin.plugin.compose",
+      "packageNameTemplate": "org.jetbrains.kotlin.plugin.compose:org.jetbrains.kotlin.plugin.compose.gradle.plugin",
+      "datasourceTemplate": "maven",
+      "registryUrlTemplate": "https://plugins.gradle.org/m2/"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/(^|/)upstreams\\.yml$/"
+      ],
+      "matchStrings": [
+        "detekt (?<currentValue>\\d+\\.\\d+\\.\\d+) plugin"
+      ],
+      "depNameTemplate": "io.gitlab.arturbosch.detekt",
+      "packageNameTemplate": "io.gitlab.arturbosch.detekt:io.gitlab.arturbosch.detekt.gradle.plugin",
+      "datasourceTemplate": "maven",
+      "registryUrlTemplate": "https://plugins.gradle.org/m2/"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/(^|/)upstreams\\.yml$/"
+      ],
+      "matchStrings": [
+        "Gradle wrapper (?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"
+      ],
+      "depNameTemplate": "gradle",
+      "packageNameTemplate": "gradle",
+      "datasourceTemplate": "gradle-version"
+    }
+  ]
+}

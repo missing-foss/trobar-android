@@ -22,12 +22,16 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="enroll_title">Inscrire cet appareil</string>
     <string name="enroll_subtitle">Scannez le QR code dans Trobar ou\nsaisissez l\'URL du serveur et le code ci-dessous.</string>
     <string name="enroll_or_manual">ou saisissez-le manuellement</string>
+    <string name="enroll_paste">Coller</string>
     <string name="enroll_code_label">Code d\'inscription</string>
     <string name="enroll_continue">Continuer</string>
     <string name="device_name_label">Nom de l\'appareil</string>
     <string name="transcode_label">Format audio</string>
     <string name="transcode_originals">Originaux (sans transcodage)</string>
     <string name="transcode_mp3_320">MP3 320 kbit/s</string>
+    <string name="transcode_mp3_256">MP3 256 kbit/s</string>
+    <string name="transcode_mp3_192">MP3 192 kbit/s</string>
+    <string name="transcode_mp3_128">MP3 128 kbit/s</string>
     <string name="enroll_code_expiry_note">Le code est à usage unique et expire 10 minutes après son affichage.</string>
     <string name="enroll_button">Inscrire</string>
     <string name="enroll_back">Retour</string>
@@ -67,6 +71,27 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <item quantity="other">%1$d fichiers trouvés</item>
     </plurals>
     <string name="sync_progress_count">%1$d / %2$d</string>
+    <string name="sync_plan">%1$s, %2$s Go à télécharger, %3$s Go libres</string>
+    <string name="sync_plan_no_free">%1$s, %2$s Go à télécharger</string>
+    <plurals name="sync_plan_tracks">
+        <item quantity="one">%1$d piste</item>
+        <item quantity="many">%1$d pistes</item>
+        <item quantity="other">%1$d pistes</item>
+    </plurals>
+    <plurals name="sync_failures_more">
+        <item quantity="one">et %1$d autre</item>
+        <item quantity="many">et %1$d autres</item>
+        <item quantity="other">et %1$d autres</item>
+    </plurals>
+    <string name="section_on_server">Sur le serveur</string>
+    <string name="artist_images_label">Images d\'artistes</string>
+    <string name="artist_images_off">Désactivées</string>
+    <string name="artist_images_small">Petites</string>
+    <string name="artist_images_full">Pleine taille</string>
+    <string name="server_owned_hint">Modifiez-les sur le serveur, dans Appareils.</string>
+    <string name="server_owned_hint_two">Modifiez le nom et le format sur le serveur, dans Appareils.</string>
+    <string name="artist_images_description">Si la synchronisation écrit artist.jpg dans le dossier de chaque artiste, et à quelle taille. Enregistré sur le serveur.</string>
+    <string name="artist_images_needs_newer_server">Ce serveur ne peut pas encore le recevoir du téléphone. Modifiez-le sur le serveur, dans Appareils.</string>
     <string name="last_sync">Dernière synchro : %1$s</string>
     <string name="never">jamais</string>
     <string name="last_error">Dernière erreur : %1$s</string>
@@ -113,9 +138,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="storage_free_of_total">%1$s Go libres sur %2$s Go</string>
     <string name="limit_exceeds_free_space">Cette limite dépasse l\'espace libre réel !</string>
 
+    <string name="section_on_device">Sur cet appareil</string>
+    <string name="on_device_hint">Ce qui est gardé ici, et la place que cela peut prendre.</string>
     <string name="section_sync">SYNCHRONISATION</string>
     <string name="hide_from_gallery_label">Masquer de la galerie</string>
-    <string name="hide_from_gallery_description">Utile avec des lecteurs comme Poweramp</string>
+    <string name="hide_from_gallery_description">Masque aussi la musique aux lecteurs qui utilisent MediaStore. Utile avec des lecteurs comme Poweramp</string>
     <string name="keep_device_content_label">Conserver le contenu de l\'appareil</string>
     <string name="keep_device_content_description">Le serveur ne supprimera pas les morceaux de cet appareil — il survit à une réinitialisation du serveur. Il peut toujours ajouter le nouveau contenu que vous sélectionnez.</string>
     <string name="missing_files_label">Fichiers supprimés localement</string>
@@ -134,9 +161,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="auto_sync_via_label">Synchronisation automatique</string>
     <string name="network_wifi">Wi-Fi uniquement</string>
     <string name="network_wifi_and_mobile">Wi-Fi + données mobiles</string>
+    <string name="network_unmetered_only">Réseaux non facturés à la consommation seulement</string>
+    <string name="network_any_hotspot">Tout réseau, partage de connexion compris</string>
     <string name="network_roaming">Wi-Fi + mobile + itinérance</string>
     <string name="charging_idle_label">Seulement en charge et au repos</string>
-    <string name="charging_idle_description">Attend, pour la synchronisation automatique, que l\'appareil soit en charge et ne soit pas utilisé. Désactivé par défaut — l\'activer peut retarder une synchronisation au-delà de l\'intervalle habituel de 6 heures. La synchronisation manuelle ignore toujours ce réglage.</string>
+    <string name="charging_idle_description">Attend, pour la synchronisation automatique, que l\'appareil soit en charge et ne soit pas utilisé. Désactivé par défaut. La synchronisation manuelle ignore toujours ce réglage.</string>
 
     <string name="section_appearance">APPARENCE</string>
     <string name="dynamic_color_label">Couleurs dynamiques</string>
@@ -165,10 +194,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="sync_folder_not_found">Dossier de synchro introuvable — choisissez-le à nouveau.</string>
     <string name="cannot_reach_server">Impossible de contacter le serveur : %1$s</string>
     <string name="file_creation_failed">création du fichier impossible</string>
+    <string name="file_rename_failed">impossible de mettre le fichier téléchargé à sa place</string>
     <string name="empty_response">réponse vide</string>
     <string name="write_stream_unavailable">flux d\'écriture indisponible</string>
     <string name="download_failed">échec du téléchargement</string>
     <string name="folder_creation_failed">création du dossier \'%1$s\' impossible</string>
+    <string name="sync_not_enough_space">Pas assez de place dans le dossier de synchro : ces téléchargements demandent au moins %1$s Go, et %2$s Go sont libres, dont %3$s Go restent libres pour que l\'appareil ne soit pas plein. Rien n\'a été téléchargé ; libérez de la place, ou réduisez ce qui est sélectionné pour cet appareil.</string>
+    <string name="sync_folder_full">Le stockage du dossier de synchro s\'est rempli pendant la synchro. Ce qui tenait y est ; libérez de la place, ou réduisez ce qui est sélectionné pour cet appareil.</string>
     <string name="track_error">%1$s : %2$s</string>
     <string name="device_playlists_unreadable">un fichier ou un dossier de playlists du dossier de synchronisation n\'a pas pu être lu, aucune playlist n\'a donc été envoyée cette fois</string>
 
@@ -185,7 +217,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="update_available">Mise à jour disponible : %1$s — voir les versions publiées.</string>
     <string name="update_up_to_date">Vous utilisez la dernière version (%1$s).</string>
     <string name="update_check_failed">Impossible de joindre GitHub (%1$s) — réessayez plus tard.</string>
-    <string name="donate_button">Faire un don</string>
+    <string name="support_button">Soutenir sur Ko-fi</string>
+    <string name="support_note">Le soutien paie les appareils de test, l\'infrastructure et Claude. Surtout, il offre un bon café et entretient la motivation pour les prochains projets.</string>
+    <string name="thanks_card_thank">Mer</string>
+    <string name="thanks_card_you">ci</string>
+    <string name="thanks_card_synced">Trobar a synchronisé %1$d fois pour vous.</string>
+    <string name="thanks_card_coffee">S\'il vous est utile, un café aide.</string>
+    <string name="thanks_card_dismiss">Ignorer</string>
     <string name="about_links_section">Liens</string>
     <string name="about_documentation">Docs</string>
     <string name="about_source_code">Code source</string>
@@ -206,6 +244,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="tictactoe_bard_win">L\'air du barde l\'emporte.</string>
     <string name="tictactoe_draw">Un duo à égalité — match nul.</string>
     <string name="tictactoe_play_again">Rejouer</string>
+    <string name="tictactoe_winning_cell">Dans la ligne gagnante</string>
 
     <!-- The navigation shell: three tabs, the basket destination, and the
          placeholder the not-yet-built destinations show. -->
@@ -221,6 +260,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="playlists_empty">Aucune playlist pour l\'instant. Rafraîchissez pour les lire depuis vos services de musique.</string>
     <string name="playlists_pick_one">Choisissez une playlist pour voir ses morceaux.</string>
     <string name="playlists_shared_by">partagée par %1$s</string>
+    <string name="playlists_public_link">Ajoutée par lien public</string>
     <string name="playlists_availability">%1$d/%2$d pistes disponibles localement (%3$d%%)</string>
     <string name="playlists_unresolved">%1$d non associé(s) localement</string>
     <string name="playlists_unknown_source">Source inconnue</string>
@@ -232,11 +272,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="subs_title">Abonnements aux playlists</string>
     <string name="subs_add_label">Ajouter une playlist publique par lien</string>
     <string name="subs_add">Ajouter</string>
-    <string name="subs_about">Playlists YouTube Music publiques uniquement — sans compte ni connexion. Trobar lit la playlist et associe ses titres à votre propre bibliothèque.</string>
-    <string name="subs_privacy">Rien n\'est envoyé à YouTube et rien n\'en est téléchargé.</string>
+    <string name="subs_about">Playlists YouTube Music, Spotify et Tidal publiques uniquement — sans compte ni connexion. Trobar lit la playlist et associe ses titres à votre propre bibliothèque.</string>
+    <string name="subs_privacy">Rien n\'est envoyé à l\'un ou l\'autre service et rien n\'en est téléchargé.</string>
     <string name="subs_add_failed">Impossible d\'ajouter cette playlist.</string>
     <string name="subs_unavailable">Indisponible — supprimée, passée en privé, ou le lien est erroné.</string>
     <string name="subs_fetch_failed">Impossible de joindre YouTube Music. Rien de ce qui a déjà été importé n\'a été modifié.</string>
+    <string name="subs_fetch_failed_spotify">Impossible de lire cette playlist sur Spotify. Rien de ce qui a déjà été importé n\'a été modifié.</string>
+    <string name="subs_fetch_failed_tidal">Impossible de lire cette playlist sur Tidal. Rien de ce qui a déjà été importé n\'a été modifié.</string>
     <string name="subs_no_matches">Récupérée, mais aucun de ses titres n\'est dans votre bibliothèque.</string>
     <string name="subs_match_count">%1$d titres sur %2$d dans votre bibliothèque</string>
     <string name="subs_refresh">Rafraîchir</string>
@@ -316,8 +358,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <item quantity="other">%1$d éléments n\'ont pas pu être envoyés et restent dans le panier.</item>
     </plurals>
     <string name="sync_blocked_offline">La synchronisation démarrera dès que le téléphone sera en ligne.</string>
-    <string name="sync_blocked_needs_unmetered">La synchronisation démarrera dès que le téléphone sera sur une connexion non facturée à la consommation, en général le Wi-Fi (votre réglage Synchroniser via).</string>
-    <string name="sync_blocked_roaming">La synchronisation démarrera dès que le téléphone ne sera plus en itinérance (votre réglage Synchroniser via).</string>
+    <string name="sync_blocked_needs_unmetered">La synchronisation démarrera dès que le téléphone sera sur une connexion non facturée à la consommation, en général le Wi-Fi (votre réglage Synchronisation automatique).</string>
+    <string name="sync_blocked_roaming">La synchronisation démarrera dès que le téléphone ne sera plus en itinérance (votre réglage Synchronisation automatique).</string>
     <string name="library_search_hint">Rechercher un artiste ou un album</string>
     <plurals name="library_artists_count">
         <item quantity="one">%1$d artiste</item>
@@ -333,10 +375,78 @@ SPDX-License-Identifier: GPL-3.0-or-later
     </plurals>
     <string name="library_sort_name">Nom</string>
     <string name="library_sort_albums">Albums</string>
+    <string name="library_offline">Hors ligne · mis à jour %1$s</string>
+    <string name="library_retry">Réessayer</string>
+    <string name="library_search_clear">Effacer la recherche</string>
+    <string name="widget_months_fewer">Un mois de moins</string>
+    <string name="widget_months_more">Un mois de plus</string>
+    <string name="playlist_new">Nouvelle playlist</string>
+    <string name="playlist_new_hint">Nom</string>
+    <string name="playlist_rename">Renommer</string>
+    <string name="playlist_delete">Supprimer</string>
+    <string name="playlist_delete_title">Supprimer « %1$s » ?</string>
+    <string name="playlist_delete_text">Elle est retirée de tous les appareils où elle est sélectionnée, et ses miroirs éventuels sont supprimés aussi.</string>
+    <string name="playlist_empty">Rien dans cette playlist pour l\'instant. Dans la bibliothèque, ouvrez un album et touchez une piste pour l\'ajouter.</string>
+    <string name="playlist_track_removed">« %1$s » retiré</string>
+    <string name="playlist_remove_track">Retirer %1$s de la playlist</string>
+    <string name="playlist_move_up">Monter %1$s</string>
+    <string name="playlist_move_down">Descendre %1$s</string>
+    <string name="playlist_changed_elsewhere">Cette playlist a changé ailleurs, rien n\'a donc été enregistré. La voici telle qu\'elle est.</string>
+    <string name="album_add_to_playlist">Ajouter à une playlist…</string>
+    <string name="library_also_appears_on">Figure aussi sur</string>
+    <string name="library_appears_on_hint">Albums d\'autres artistes où figure %1$s. En sélectionner un ne synchronise que les morceaux de %1$s.</string>
+    <string name="library_appears_on_count">figure sur %1$d</string>
+    <string name="album_only_theirs">Ajouter au panier n\'ajoute que les pistes de %1$s : %2$d sur %3$d.</string>
+    <string name="selection_artist_on_album">%1$s sur %2$s</string>
+    <plurals name="selection_tracks_of">
+        <item quantity="one">%1$d piste sur %2$d</item>
+        <item quantity="many">%1$d pistes sur %2$d</item>
+        <item quantity="other">%1$d pistes sur %2$d</item>
+    </plurals>
+    <plurals name="selection_whole_album">
+        <item quantity="one">album entier, %1$d piste</item>
+        <item quantity="many">album entier, %1$d pistes</item>
+        <item quantity="other">album entier, %1$d pistes</item>
+    </plurals>
     <string name="library_pick_an_artist">Choisissez un artiste pour voir ses albums.</string>
     <string name="library_sync_entire_artist">Synchroniser tout l\'artiste</string>
     <string name="library_artist_in_basket">Dans le panier</string>
+    <string name="album_add_to_basket">Ajouter au panier</string>
+    <string name="album_in_basket">Dans le panier</string>
+    <string name="album_disc">Disque %1$d</string>
+    <string name="album_update_server">Mettez à jour le serveur pour voir les pistes de cet album.</string>
+    <string name="album_add_track_to">Ajouter « %1$s » à</string>
+    <string name="album_new_playlist">Nouvelle playlist…</string>
+    <string name="album_track_added">Ajouté à « %1$s »</string>
+    <string name="selections_title">Sélection pour %1$s</string>
+    <string name="selections_artists">Artistes</string>
+    <string name="selections_albums">Albums</string>
+    <string name="selections_playlists">Playlists</string>
+    <string name="selections_tracks">Pistes</string>
+    <string name="selections_autofit">Remplissage auto</string>
+    <string name="selections_autofit_note">Réglé dans le navigateur : on ne peut pas le retirer ici.</string>
+    <string name="selections_empty">Rien n\'est sélectionné pour cet appareil. Touchez deux fois un album dans la bibliothèque ou sur l\'accueil pour l\'ajouter.</string>
+    <string name="selections_remove">Retirer</string>
+    <string name="selections_remove_title">Retirer « %1$s » de %2$s ?</string>
+    <plurals name="selections_remove_body">
+        <item quantity="one">La prochaine synchronisation supprime %1$d piste de cet appareil. Les pistes qu\'une autre sélection utilise restent.</item>
+        <item quantity="other">La prochaine synchronisation supprime %1$d pistes de cet appareil. Les pistes qu\'une autre sélection utilise restent.</item>
+    </plurals>
+    <string name="widget_playlists">Playlists</string>
+    <string name="widget_playlists_nothing">Rien à synchroniser vers %1$s depuis vos playlists.</string>
+    <string name="widget_playlists_all">Toutes les playlists</string>
+    <string name="widget_playlists_how_many">Combien</string>
+    <string name="widget_playlists_fewer">Afficher moins de playlists</string>
+    <string name="widget_playlists_more">Afficher plus de playlists</string>
+    <plurals name="widget_playlists_to_sync">
+        <item quantity="one">%1$d à synchroniser vers %2$s</item>
+        <item quantity="other">%1$d à synchroniser vers %2$s</item>
+    </plurals>
     <string name="stage_action">Ajouter au panier</string>
+    <string name="stage_action_for">Ajouter au panier pour %1$s</string>
+    <string name="playlists_sync_entire">Synchroniser toute la playlist</string>
+    <string name="playlists_open_artist">Ouvrir l\'artiste</string>
+    <string name="playlists_open_album">Ouvrir l\'album</string>
     <string name="stage_already_staged">Déjà dans le panier pour %1$s</string>
     <string name="stage_no_destination">Aucun appareil vers lequel ajouter pour l\'instant</string>
     <string name="library_similar">Artistes similaires dans votre bibliothèque</string>
@@ -375,6 +485,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="widget_nothing_recently_added">Rien d\'ajouté récemment.</string>
     <string name="widget_nothing_recently_released">Rien de sorti récemment.</string>
     <string name="widget_no_suggestions">Pas encore de suggestions.</string>
+    <string name="widget_nothing_recently_added_not_here">Rien d\'ajouté récemment qui ne soit déjà sur %1$s.</string>
+    <string name="widget_nothing_recently_released_not_here">Rien de sorti récemment qui ne soit déjà sur %1$s.</string>
+    <string name="widget_this_device">cet appareil</string>
+    <string name="widget_no_suggestions_not_here">Aucune suggestion qui ne soit déjà sur %1$s.</string>
     <plurals name="widget_hours_of_music">
         <item quantity="one">%1$d heure de musique</item>
         <item quantity="other">%1$d heures de musique</item>
@@ -408,4 +522,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <item quantity="other">%1$d délégations actives</item>
     </plurals>
     <string name="widget_admin_manage_in_browser">La gestion des utilisateurs et des délégations se fait dans le navigateur.</string>
+    <string name="sync_notification_label">Notification de progression</string>
+    <string name="sync_notification_allowed">Autorisée</string>
+    <string name="sync_notification_off">Désactivée</string>
+    <string name="sync_notification_allowed_description">Montre où en est une synchronisation pendant qu\'elle tourne.</string>
+    <string name="sync_notification_off_description">Les synchronisations tournent quand même, sans notification de progression. Touchez pour l\'autoriser dans les paramètres Android.</string>
+    <string name="playlists_sort">Trier</string>
+    <string name="playlists_sort_availability">Disponibilité</string>
+    <string name="playlists_sort_most_tracks">Plus de titres</string>
+    <string name="playlists_sort_newest">Plus récentes dans Trobar</string>
+    <string name="playlists_sort_name">Nom (A–Z)</string>
 </resources>

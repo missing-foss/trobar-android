@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package org.missing_foss.trobar
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -182,15 +184,17 @@ object DevicesWidget : Widget {
             return
         }
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            cards.forEach { card -> DeviceRow(card, isThisPhone = card.device.id == actions.host.staging.thisDeviceId) }
+            cards.forEach { card ->
+                DeviceRow(card, isThisPhone = card.device.id == actions.host.staging.thisDeviceId) { actions.links.onOpenDevice(card.device.id) }
+            }
         }
     }
 }
 
 @Composable
-private fun DeviceRow(card: DeviceCard, isThisPhone: Boolean) {
+private fun DeviceRow(card: DeviceCard, isThisPhone: Boolean, onOpen: () -> Unit) {
     val device = card.device
-    Column(Modifier.testTag("device-${device.id}")) {
+    Column(Modifier.clickable(role = Role.Button, onClick = onOpen).testTag("device-${device.id}")) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             DeviceIcon(device.icon, device.deviceType, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             // A badge takes the next line when it doesn't fit beside the name,

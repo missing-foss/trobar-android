@@ -14,12 +14,9 @@
 
 package org.missing_foss.trobar
 
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import org.junit.runner.RunWith
 
-@RunWith(AndroidJUnit4::class)
 class FolderScanTest {
 
     /** A tree as a map of documentId to its children. `null` for an id
@@ -79,6 +76,15 @@ class FolderScanTest {
             file("real.opus", 42),
         )))
         assertEquals(42L, walkForeignAudio("root", emptySet()) { tree.list(it) }.foreignBytes)
+    }
+
+    @Test
+    fun countsAiffAsAudioButNotADotAlacFile() {
+        // The server scans AIFF and copies it as is to a device not set to
+        // MP3; ALAC lives in .m4a, so a ".alac" file is not audio.
+        val tree = FakeTree(mapOf("root" to listOf(
+            file("a.aiff", 100), file("b.AIF", 20), file("c.alac", 7))))
+        assertEquals(120L, walkForeignAudio("root", emptySet()) { tree.list(it) }.foreignBytes)
     }
 
     @Test

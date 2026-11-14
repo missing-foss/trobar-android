@@ -13,6 +13,20 @@ issue before large PRs, AI-assisted patches are fine if you say so in the PR,
 `./gradlew assembleDebug` must pass, contributions are `GPL-3.0-or-later`
 like the client itself.
 
+Before opening a pull request, run `dev/verify.sh` from the repository root.
+It builds the debug APK and runs detekt, the generated brand colours and
+single-colour mark, the resource size limit, the EN/FR translation check,
+the licensing (REUSE) and secret scans, and the repository's guards. It ends
+in `VERIFY OK` or `VERIFY FAILED`; a step that prints `SKIP` did not run, so
+read the step list rather than the last line. The instrumented tests need an
+emulator and are run separately (`./gradlew connectedDebugAndroidTest`).
+
+Every dependency is locked, transitive ones included (`app/gradle.lockfile`,
+`freedroidwarn/gradle.lockfile`, `buildscript-gradle.lockfile`). If you add or
+change one, rewrite the lockfiles with
+`./gradlew :app:dependencies :freedroidwarn:dependencies buildEnvironment --write-locks` and commit
+them with your change. Otherwise the build fails, naming what isn't locked.
+
 Public issues and PRs live here on GitHub.
 
 Pull requests opened here are reviewed and then shipped by the maintainers

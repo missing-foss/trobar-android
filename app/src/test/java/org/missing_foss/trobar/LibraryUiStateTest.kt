@@ -2,14 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package org.missing_foss.trobar
 
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import org.junit.runner.RunWith
 
 /** The artist list as the web computes it: a case-insensitive substring
  * search, then by name, or by album count descending with name breaking ties. */
-@RunWith(AndroidJUnit4::class)
 class LibraryUiStateTest {
     private val artists = listOf(
         LibraryArtist("Nebula Drift", 20, 3),
@@ -33,7 +30,8 @@ class LibraryUiStateTest {
     @Test
     fun searchIsASubstringNotAPrefix() {
         assertEquals(listOf("Nebula Drift"), LibraryUiState(artists = artists, query = "BUL").visibleArtists.map { it.artist })
-        assertEquals(listOf("Glass Meridian", "Nebula Drift"), LibraryUiState(artists = artists, query = "i").visibleArtists.map { it.artist }.filter { it != "aphelion" && it != "Cinder & Ash" })
+        val shown = LibraryUiState(artists = artists, query = "i").visibleArtists.map { it.artist }
+        assertEquals(listOf("Glass Meridian", "Nebula Drift"), shown.filter { it != "aphelion" && it != "Cinder & Ash" })
         assertEquals(4, LibraryUiState(artists = artists, query = "  ").visibleArtists.size)
     }
 

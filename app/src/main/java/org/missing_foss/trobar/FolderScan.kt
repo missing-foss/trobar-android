@@ -6,6 +6,7 @@ import android.content.Context
 import android.database.Cursor
 import android.net.Uri
 import android.provider.DocumentsContract
+import androidx.documentfile.provider.DocumentFile
 
 /** What a folder scan found. `directoriesQueried` is here for the tests
  * rather than for the server: the cost of this walk is one content-provider
@@ -157,6 +158,39 @@ internal fun readChildren(context: Context, treeUri: Uri, documentId: String): L
     }
 }
 
+/** One entry of a directory, with the DocumentFile to act on it. */
+internal data class ListedFile(
+    val name: String,
+    val isDirectory: Boolean,
+    val size: Long,
+    val file: DocumentFile,
+)
+
+/** A directory's children with name, kind and size, for the sync's walks.
+ *
+ * On a SAF tree this is ONE content-provider query, the one [readChildren]
+ * makes. `listFiles()` followed by `name`, `isDirectory` or `length()` on each
+ * child is a query per directory plus a query per child per property, and a
+ * sync touching thousands of tracks paid it for every one. A `file:`
+ * directory, which the tests use, is listed directly, where those calls cost
+ * nothing. Null if the directory could not be read. */
+internal fun listDirectory(context: Context, dir: DocumentFile): List<ListedFile>? {
+    val uri = dir.uri
+    if (uri.scheme != "content") {
+        return dir.listFiles().mapNotNull { f -> f.name?.let { ListedFile(it, f.isDirectory, f.length(), f) } }
+    }
+    val documentId = try {
+        DocumentsContract.getDocumentId(uri)
+    } catch (ignored: IllegalArgumentException) {
+        return null
+    }
+    val children = readChildren(context, uri, documentId) ?: return null
+    return children.mapNotNull { c ->
+        DocumentFile.fromTreeUri(context, DocumentsContract.buildDocumentUriUsingTree(uri, c.documentId))
+            ?.let { ListedFile(c.name, c.isDirectory, c.size, it) }
+    }
+}
+
 /** Audio, and not something the server already counts.
  *
  * Audio only, matching what the server's own budget counts and what
@@ -171,5 +205,7 @@ private fun isForeignAudio(name: String, path: String, managedPaths: Set<String>
 /** Shared with SyncEngine, which uses the same set to decide what counts as
  * a track when it reports held paths at enrollment. One definition, because
  * two would drift and the disagreement would show up as a budget that is
- * quietly wrong rather than as an error. */
-val AUDIO_FILE_EXTENSIONS = setOf("flac", "mp3", "m4a", "ogg", "opus", "wav", "aac", "alac")
+ * quietly wrong rather than as an error. The formats the server scans; ALAC
+ * lives in .m4a (there is no .alac extension). Kept aligned with the desktop
+ * client's audioExtensions. */
+val AUDIO_FILE_EXTENSIONS = setOf("flac", "wav", "aiff", "aif", "mp3", "m4a", "ogg", "opus", "aac")

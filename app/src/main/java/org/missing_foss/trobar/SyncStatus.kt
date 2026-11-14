@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package org.missing_foss.trobar
 
+import android.content.Context
+import android.icu.text.RelativeDateTimeFormatter
+import android.icu.util.ULocale
 import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,9 +36,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.work.Data
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import java.io.IOException
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -76,7 +81,37 @@ data class SyncStatus(
     val result: WorkSyncResult? = null,
     val error: String? = null,
     val waitingReason: Int? = null,
+    val plan: SyncPlan? = null,
 )
+
+/** "142 tracks, 4.2 GB to download, 18.6 GB free". */
+internal fun syncPlanText(context: Context, plan: SyncPlan): String {
+    val tracks = context.resources.getQuantityString(R.plurals.sync_plan_tracks, plan.tracks, plan.tracks)
+    val bytes = SyncEngine.gigabytes(plan.bytes, up = true)
+    val free = plan.freeBytes ?: return context.getString(R.string.sync_plan_no_free, tracks, bytes)
+    return context.getString(R.string.sync_plan, tracks, bytes, SyncEngine.gigabytes(free, up = false))
+}
+
+/** "2 hours ago", in [locale]; "now" under a minute. */
+internal fun relativeSyncTime(atMillis: Long, nowMillis: Long, locale: Locale): String {
+    val format = RelativeDateTimeFormatter.getInstance(ULocale.forLocale(locale))
+    val minutes = (nowMillis - atMillis) / MILLIS_PER_MINUTE
+    val hours = minutes / MINUTES_PER_HOUR
+    val days = hours / HOURS_PER_DAY
+    return when {
+        minutes < 1 -> format.format(RelativeDateTimeFormatter.Direction.PLAIN, RelativeDateTimeFormatter.AbsoluteUnit.NOW)
+        hours < 1 -> format.format(minutes.toDouble(), RelativeDateTimeFormatter.Direction.LAST, RelativeDateTimeFormatter.RelativeUnit.MINUTES)
+        days < 1 -> format.format(hours.toDouble(), RelativeDateTimeFormatter.Direction.LAST, RelativeDateTimeFormatter.RelativeUnit.HOURS)
+        else -> format.format(days.toDouble(), RelativeDateTimeFormatter.Direction.LAST, RelativeDateTimeFormatter.RelativeUnit.DAYS)
+    }
+}
+
+private fun planFrom(progress: Data): SyncPlan? {
+    val tracks = progress.getInt(SyncWorker.KEY_PLAN_TRACKS, 0)
+    if (tracks <= 0) return null
+    val free = progress.getLong(SyncWorker.KEY_PLAN_FREE, -1L)
+    return SyncPlan(tracks, progress.getLong(SyncWorker.KEY_PLAN_BYTES, 0L), free.takeIf { it >= 0 })
+}
 
 internal fun syncStatusOf(manual: WorkInfo?, scheduled: WorkInfo?, lastError: String?, blockedReason: Int?): SyncStatus {
     val running = listOfNotNull(manual, scheduled).firstOrNull { it.state == WorkInfo.State.RUNNING }
@@ -86,6 +121,7 @@ internal fun syncStatusOf(manual: WorkInfo?, scheduled: WorkInfo?, lastError: St
             done = running.progress.getInt(SyncWorker.KEY_DONE, 0),
             total = running.progress.getInt(SyncWorker.KEY_TOTAL, 0),
             scanning = running.progress.getBoolean(SyncWorker.KEY_SCANNING, false),
+            plan = planFrom(running.progress),
         )
         manual?.state == WorkInfo.State.ENQUEUED || manual?.state == WorkInfo.State.BLOCKED ->
             SyncStatus(SyncPhase.WAITING, waitingReason = blockedReason)
@@ -242,15 +278,25 @@ private fun finishedSummary(r: WorkSyncResult): String {
         if (r.failed > 0) ", " + res.getQuantityString(R.plurals.sync_failed, r.failed, r.failed) else ""
 }
 
-/** What the Sync screen held, now at the top of Settings: the state and
- * progress, the last sync, the last error (copyable, dismissable), the
- * tracks deleted by hand awaiting a decision, and Sync now -- the manual
- * start the tap on the logo used to be. */
+/** What the Sync screen held: the state and progress, the last sync, the
+ * last error (copyable, dismissable), the tracks deleted by hand awaiting a
+ * decision, and Sync now -- the manual start the tap on the logo used to be.
+ * In Settings, [live] is false while the server answers: the indicator at
+ * the bottom of every tab then shows a run's state and progress, so the card
+ * keeps to the last sync, its plan, what failed and what waits on a decision.
+ * When the server doesn't answer, the indicator shows that instead, and
+ * [live] is true so the run is still shown somewhere. */
 @Composable
-fun SyncStatusCard(pairing: Prefs.Pairing, status: SyncStatus) {
+fun SyncStatusCard(pairing: Prefs.Pairing, status: SyncStatus, live: Boolean = true) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val lastSyncAt by remember { Prefs.lastSyncAt(context) }.collectAsState(initial = null)
+    val lastSyncMillis by remember { Prefs.lastSyncAtMillis(context) }.collectAsState(initial = null)
+    val failed by remember { Prefs.lastSyncFailed(context) }.collectAsState(initial = 0)
+    val failures by remember { Prefs.lastSyncFailures(context) }.collectAsState(initial = emptyList())
+    val locale = remember(context) { AppLanguage.locale(context) }
+    val lastSync = lastSyncMillis?.let { relativeSyncTime(it, System.currentTimeMillis(), locale) } ?: lastSyncAt
+    val lastLine = lastSyncLine(lastSync, failed)
     val pendingMissingJson by remember { Prefs.pendingMissingTracks(context) }.collectAsState(initial = null)
     val pendingMissing = remember(pendingMissingJson) { parsePendingMissing(pendingMissingJson) }
     var resolvingMissing by remember { mutableStateOf(false) }
@@ -279,8 +325,14 @@ fun SyncStatusCard(pairing: Prefs.Pairing, status: SyncStatus) {
 
     ElevatedCard(modifier = Modifier.fillMaxWidth().testTag("sync_status_card")) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatusCardHeadline(status, lastSyncAt)
-            if (status.phase == SyncPhase.RUNNING) {
+            StatusCardHeadline(status, lastLine, live)
+            status.plan?.takeIf { status.phase == SyncPhase.RUNNING }?.let { plan ->
+                Text(
+                    syncPlanText(context, plan), style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline, modifier = Modifier.testTag("sync_plan"),
+                )
+            }
+            if (live && status.phase == SyncPhase.RUNNING) {
                 if (status.scanning) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     if (status.done > 0) {
@@ -299,16 +351,18 @@ fun SyncStatusCard(pairing: Prefs.Pairing, status: SyncStatus) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
                 Text(
-                    stringResource(R.string.last_sync, lastSyncAt ?: stringResource(R.string.never)),
+                    lastLine,
                     style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline,
                 )
             }
             // A failed run leaves the same error on two surfaces: the stored
             // last error and WorkManager's FAILED record. One line, and the
             // dismiss clears both.
-            status.error?.let { error ->
+            val failureText = if (failures.isEmpty()) status.error?.let { stringResource(R.string.sync_failure, it) }
+            else failureList(failures, failed)
+            failureText?.let { text ->
                 CopyableError(
-                    stringResource(R.string.sync_failure, error),
+                    text,
                     onDismiss = {
                         scope.launch {
                             Prefs.clearSyncError(context)
@@ -342,10 +396,16 @@ fun SyncStatusCard(pairing: Prefs.Pairing, status: SyncStatus) {
     }
 }
 
-/** The card's first line, with the mark in the state the sync is in. */
+/** Whether Settings' card shows a run's state and progress: only when the
+ * indicator, which then shows the connection instead, doesn't. */
+internal fun settingsCardIsLive(conn: ConnState): Boolean = conn != ConnState.OK
+
+/** The card's first line, with the mark in the state the sync is in;
+ * without [live], a run or a wait shows the last sync, as when idle. */
 @Composable
-private fun StatusCardHeadline(status: SyncStatus, lastSyncAt: String?) {
-    val mark = when (status.phase) {
+private fun StatusCardHeadline(status: SyncStatus, lastLine: String, live: Boolean) {
+    val phase = if (live) status.phase else status.phase.takeUnless { it == SyncPhase.RUNNING || it == SyncPhase.WAITING } ?: SyncPhase.IDLE
+    val mark = when (phase) {
         SyncPhase.RUNNING -> MarkState.SYNCING
         SyncPhase.FAILED -> MarkState.ERROR
         SyncPhase.SUCCEEDED -> MarkState.SUCCESS
@@ -355,18 +415,36 @@ private fun StatusCardHeadline(status: SyncStatus, lastSyncAt: String?) {
         AppLogo(CARD_MARK, Modifier.testTag(syncMarkTag(mark)), mark, contentDescription = null)
         Text(
             when {
-                status.phase == SyncPhase.RUNNING && status.scanning -> stringResource(R.string.recovery_scanning)
-                status.phase == SyncPhase.RUNNING -> stringResource(R.string.sync_in_progress)
-                status.phase == SyncPhase.WAITING ->
+                phase == SyncPhase.RUNNING && status.scanning -> stringResource(R.string.recovery_scanning)
+                phase == SyncPhase.RUNNING -> stringResource(R.string.sync_in_progress)
+                phase == SyncPhase.WAITING ->
                     status.waitingReason?.let { stringResource(it) } ?: stringResource(R.string.sync_indicator_waiting)
-                else -> stringResource(R.string.last_sync, lastSyncAt ?: stringResource(R.string.never))
+                else -> lastLine
             },
             style = MaterialTheme.typography.bodyMedium,
         )
     }
 }
 
+/** "Last sync: 2 hours ago · 3 failed". */
+@Composable
+private fun lastSyncLine(lastSync: String?, failed: Int): String {
+    val line = stringResource(R.string.last_sync, lastSync ?: stringResource(R.string.never))
+    return if (failed > 0) line + " · " + pluralStringResource(R.plurals.sync_failed, failed, failed) else line
+}
+
+/** Each failure, its path over its reason, and how many were left out. */
+@Composable
+private fun failureList(failures: List<SyncFailure>, failed: Int): String {
+    val lines = failures.joinToString("\n\n") { "${it.path}\n${it.reason}" }
+    val more = failed - failures.size
+    return if (more > 0) lines + "\n\n" + pluralStringResource(R.plurals.sync_failures_more, more, more) else lines
+}
+
 private const val FINISHED_SHOWN_MS = 5_000L
+private const val MILLIS_PER_MINUTE = 60_000L
+private const val MINUTES_PER_HOUR = 60L
+private const val HOURS_PER_DAY = 24L
 
 /** The sync marks: one line of label text in the indicator, so under 24 dp
  * and the kit's small mark; larger beside the card's first line. */

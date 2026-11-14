@@ -32,7 +32,7 @@ emulator:
      you paired against; nothing is hard-coded.
   2. **`api.github.com`** — the "check for updates" button on the About screen,
      and **only** when you tap it. Never automatic, never in the background.
-- The GitHub / Liberapay links on the About screen open in your **browser** via
+- The GitHub / Ko-fi links on the About screen open in your **browser** via
   an intent — they are not requests the app makes.
 - **Dynamic check:** with the app freshly launched and idle, a packet capture
   (`tcpdump`) on the emulator recorded **zero** outbound DNS/connections from the

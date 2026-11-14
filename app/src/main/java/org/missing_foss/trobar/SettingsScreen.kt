@@ -3,43 +3,43 @@
 package org.missing_foss.trobar
 
 import android.content.Context
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.ui.semantics.Role
-import androidx.compose.material3.RadioButton
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.filled.AppShortcut
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.AppShortcut
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.HideImage
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Wifi
@@ -53,27 +53,34 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.documentfile.provider.DocumentFile
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.documentfile.provider.DocumentFile
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import java.io.IOException
+import org.json.JSONException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -90,7 +97,22 @@ fun SettingsScreen(
     syncStatus: @Composable () -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val notificationAccess = LocalNotificationAccess.current
+    // Whether the sync's progress notification may show, read again each
+    // time Settings comes back, so a change made in Android's settings shows.
+    var notificationsAllowed by remember { mutableStateOf(notificationAccess.allowedNow(context)) }
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                notificationsAllowed = notificationAccess.allowedNow(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     var deviceInfo by remember { mutableStateOf<DeviceInfo?>(null) }
+    var artistImagesWritable by remember { mutableStateOf(true) }
     var storageStats by remember { mutableStateOf<StorageStats?>(null) }
     var limitField by remember { mutableStateOf("") }
     var savingLimit by remember { mutableStateOf(false) }
@@ -107,6 +129,45 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Artist images: chosen here, saved to the server, then read back from it,
+    // which stays the source of truth. A server too old for the route (404)
+    // keeps the tile read-only from then on.
+    suspend fun revertArtistImages(previous: String?, e: Exception) {
+        deviceInfo = deviceInfo?.copy(artistImages = previous)
+        snackbarHostState.showSnackbar(e.message ?: context.getString(R.string.save_failed_generic))
+    }
+
+    fun saveArtistImages(value: String?) {
+        val previous = deviceInfo?.artistImages
+        deviceInfo = deviceInfo?.copy(artistImages = value)
+        scope.launch {
+            val api = ApiClient(context, pairing.serverUrl, pairing.token)
+            try {
+                val info = withContext(Dispatchers.IO) {
+                    api.setArtistImages(value)
+                    api.getDeviceInfo()
+                }
+                deviceInfo = info
+            } catch (e: ServerErrorException) {
+                deviceInfo = deviceInfo?.copy(artistImages = previous)
+                if (e.code == HTTP_NOT_FOUND) artistImagesWritable = false
+                snackbarHostState.showSnackbar(
+                    if (e.code == HTTP_NOT_FOUND) context.getString(R.string.artist_images_needs_newer_server)
+                    else e.message ?: context.getString(R.string.save_failed_generic),
+                )
+            } catch (e: IOException) {
+                revertArtistImages(previous, e)
+            } catch (e: JSONException) {
+                // An answer that is not the server's JSON (a proxy's page, a
+                // cut-off body): a failed save, never a crash.
+                revertArtistImages(previous, e)
+            } catch (e: IllegalArgumentException) {
+                // OkHttp's answer to a stored address it cannot build a request from.
+                revertArtistImages(previous, e)
+            }
+        }
+    }
+
     fun saveLimit() {
         scope.launch {
             savingLimit = true
@@ -122,13 +183,17 @@ fun SettingsScreen(
         }
     }
 
-    val hasTelephony = remember {
-        context.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
-    }
-    // DAPs and other Wi-Fi-only devices have no cellular radio at all — force
-    // Wi-Fi-only rather than show irrelevant mobile-data options.
-    LaunchedEffect(hasTelephony) {
-        if (!hasTelephony && networkMode != Prefs.NETWORK_WIFI_ONLY) {
+    // From the device profile the app mode is read from, which a test can set.
+    val hasTelephony = (LocalDeviceProfile.current ?: remember { DeviceProfile.of(context) }).hasTelephony
+    // DAPs and other Wi-Fi-only devices have no mobile data, so "Wi-Fi +
+    // mobile data" means nothing there; but a phone's hotspot is a metered
+    // Wi-Fi network, and they need to be able to sync over one. Their choice
+    // is unmetered only or any network (see the sync-conditions card). Keyed
+    // on the mode too: the first composition sees the flow's initial value,
+    // not the stored one, so an effect keyed on the device alone never saw
+    // what was stored.
+    LaunchedEffect(hasTelephony, networkMode) {
+        if (!hasTelephony && networkMode == Prefs.NETWORK_WIFI_AND_MOBILE) {
             Prefs.setNetworkMode(context, Prefs.NETWORK_WIFI_ONLY)
         }
     }
@@ -269,8 +334,15 @@ fun SettingsScreen(
                 }
             }
 
+            // The server being away leaves everything below within reach.
+            nav.problem()
+
             // What the Sync screen held: the sync's state, progress and history.
             syncStatus()
+
+            deviceInfo?.let { info ->
+                ServerOwnedSettings(info, onArtistImages = if (artistImagesWritable) { value: String? -> saveArtistImages(value) } else null)
+            }
 
             // Connexion section
             SectionLabel(stringResource(R.string.section_connection))
@@ -286,6 +358,54 @@ fun SettingsScreen(
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 TileRow(Icons.Filled.FolderOpen, stringResource(R.string.folder_label), humanReadablePath(context, Uri.parse(treeUri)),
                     onClick = { folderLauncher.launch(null) })
+            }
+
+            // What the device holds, whichever setting decides it.
+            SectionLabel(stringResource(R.string.section_on_device))
+            ElevatedCard(modifier = Modifier.fillMaxWidth().testTag("on_device_settings")) {
+                Text(
+                    stringResource(R.string.on_device_hint), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(16.dp),
+                )
+                // #63: 'device' source-of-truth — the server stops pruning this
+                // device's tracks, so it survives a server DB loss. Optimistic
+                // flip, reverted on error. Reflects the single server field.
+                SwitchRow(
+                    icon = Icons.Filled.Lock,
+                    label = stringResource(R.string.keep_device_content_label),
+                    description = stringResource(R.string.keep_device_content_description),
+                    checked = deviceInfo?.sourceOfTruth == "device",
+                    onCheckedChange = { keep ->
+                        val value = if (keep) "device" else "server"
+                        val previous = deviceInfo?.sourceOfTruth ?: "server"
+                        deviceInfo = deviceInfo?.copy(sourceOfTruth = value)
+                        scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    ApiClient(context, pairing.serverUrl, pairing.token)
+                                        .setSourceOfTruth(value)
+                                }
+                            } catch (e: Exception) {
+                                deviceInfo = deviceInfo?.copy(sourceOfTruth = previous)
+                                snackbarHostState.showSnackbar(
+                                    e.message ?: context.getString(R.string.save_failed_generic))
+                            }
+                        }
+                    },
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
+                ChoiceRow(
+                    icon = Icons.Filled.FolderOff,
+                    label = stringResource(R.string.missing_files_label),
+                    options = listOf(
+                        Prefs.MISSING_ASK to stringResource(R.string.missing_files_ask),
+                        Prefs.MISSING_ALWAYS_RESYNC to stringResource(R.string.missing_files_resync),
+                        Prefs.MISSING_ALWAYS_EXCLUDE to stringResource(R.string.missing_files_exclude),
+                    ),
+                    selected = missingFileBehavior,
+                    description = stringResource(R.string.missing_files_description),
+                    onSelect = { value -> scope.launch { Prefs.setMissingFileBehavior(context, value) } },
+                )
                 HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
                 TileRow(
                     icon = Icons.Filled.Storage,
@@ -332,44 +452,17 @@ fun SettingsScreen(
                     },
                 )
                 HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
-                ChoiceRow(
-                    icon = Icons.Filled.FolderOff,
-                    label = stringResource(R.string.missing_files_label),
-                    options = listOf(
-                        Prefs.MISSING_ASK to stringResource(R.string.missing_files_ask),
-                        Prefs.MISSING_ALWAYS_RESYNC to stringResource(R.string.missing_files_resync),
-                        Prefs.MISSING_ALWAYS_EXCLUDE to stringResource(R.string.missing_files_exclude),
-                    ),
-                    selected = missingFileBehavior,
-                    description = stringResource(R.string.missing_files_description),
-                    onSelect = { value -> scope.launch { Prefs.setMissingFileBehavior(context, value) } },
-                )
-                HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
-                // #63: 'device' source-of-truth — the server stops pruning this
-                // device's tracks, so it survives a server DB loss. Optimistic
-                // flip, reverted on error. Reflects the single server field.
-                SwitchRow(
-                    icon = Icons.Filled.Lock,
-                    label = stringResource(R.string.keep_device_content_label),
-                    description = stringResource(R.string.keep_device_content_description),
-                    checked = deviceInfo?.sourceOfTruth == "device",
-                    onCheckedChange = { keep ->
-                        val value = if (keep) "device" else "server"
-                        val previous = deviceInfo?.sourceOfTruth ?: "server"
-                        deviceInfo = deviceInfo?.copy(sourceOfTruth = value)
-                        scope.launch {
-                            try {
-                                withContext(Dispatchers.IO) {
-                                    ApiClient(context, pairing.serverUrl, pairing.token)
-                                        .setSourceOfTruth(value)
-                                }
-                            } catch (e: Exception) {
-                                deviceInfo = deviceInfo?.copy(sourceOfTruth = previous)
-                                snackbarHostState.showSnackbar(
-                                    e.message ?: context.getString(R.string.save_failed_generic))
-                            }
-                        }
-                    },
+                // The app asks once, after the folder picker; from then on
+                // Android's own page for the app is where it changes.
+                TileRow(
+                    icon = if (notificationsAllowed) Icons.Filled.Notifications else Icons.Filled.NotificationsOff,
+                    label = stringResource(R.string.sync_notification_label),
+                    value = stringResource(
+                        if (notificationsAllowed) R.string.sync_notification_allowed else R.string.sync_notification_off),
+                    description = stringResource(
+                        if (notificationsAllowed) R.string.sync_notification_allowed_description
+                        else R.string.sync_notification_off_description),
+                    onClick = { notificationAccess.openSettings(context) },
                 )
             }
 
@@ -379,22 +472,29 @@ fun SettingsScreen(
             // so the section itself (and its card) is no longer gated at all.
             SectionLabel(stringResource(R.string.section_sync_conditions))
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                if (hasTelephony) {
-                    ChoiceRow(
-                        icon = Icons.Filled.Wifi,
-                        label = stringResource(R.string.auto_sync_via_label),
-                        options = listOf(
+                ChoiceRow(
+                    icon = Icons.Filled.Wifi,
+                    label = stringResource(R.string.auto_sync_via_label),
+                    // Without a mobile radio the only network question left is
+                    // whether a metered one (a phone's hotspot) will do.
+                    options = if (hasTelephony) {
+                        listOf(
                             Prefs.NETWORK_WIFI_ONLY to stringResource(R.string.network_wifi),
                             Prefs.NETWORK_WIFI_AND_MOBILE to stringResource(R.string.network_wifi_and_mobile),
                             Prefs.NETWORK_ANY to stringResource(R.string.network_roaming),
-                        ),
-                        selected = networkMode,
-                        onSelect = { value ->
-                            scope.launch { Prefs.setNetworkMode(context, value); SyncWorker.schedulePeriodic(context) }
-                        },
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
-                }
+                        )
+                    } else {
+                        listOf(
+                            Prefs.NETWORK_WIFI_ONLY to stringResource(R.string.network_unmetered_only),
+                            Prefs.NETWORK_ANY to stringResource(R.string.network_any_hotspot),
+                        )
+                    },
+                    selected = networkMode,
+                    onSelect = { value ->
+                        scope.launch { Prefs.setNetworkMode(context, value); SyncWorker.schedulePeriodic(context) }
+                    },
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
                 SwitchRow(
                     icon = Icons.Filled.BatteryChargingFull,
                     label = stringResource(R.string.charging_idle_label),
@@ -604,3 +704,57 @@ private fun brandThemeDescription(theme: BrandTheme): Int = when (theme) {
     BrandTheme.CONTRASTE -> R.string.brand_theme_contraste
 }
 
+/** What the server holds about this device. The name and the format change
+ * only on the server, and say where; Artist images can be chosen here
+ * ([onArtistImages]), unless the server is too old to take it from the phone,
+ * when it shows read-only like the others. */
+@Composable
+internal fun ServerOwnedSettings(info: DeviceInfo, onArtistImages: ((String?) -> Unit)? = null) {
+    SectionLabel(stringResource(R.string.section_on_server))
+    ElevatedCard(modifier = Modifier.fillMaxWidth().testTag("server_owned_settings")) {
+        TileRow(Icons.Filled.Info, stringResource(R.string.device_name_label), info.name)
+        HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
+        TileRow(
+            Icons.Filled.Info, stringResource(R.string.transcode_label),
+            transcodeLabel(info.transcodeFormat)?.let { stringResource(it) } ?: info.transcodeFormat.orEmpty(),
+        )
+        HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
+        if (onArtistImages != null) {
+            ChoiceRow(
+                icon = Icons.Filled.Image,
+                label = stringResource(R.string.artist_images_label),
+                options = ARTIST_IMAGES_CHOICES.map { it to stringResource(artistImagesLabel(it.takeUnless { v -> v == OFF })) },
+                selected = info.artistImages ?: OFF,
+                description = stringResource(R.string.artist_images_description),
+                onSelect = { value -> onArtistImages(value.takeUnless { it == OFF }) },
+            )
+        } else {
+            TileRow(Icons.Filled.Info, stringResource(R.string.artist_images_label), stringResource(artistImagesLabel(info.artistImages)))
+        }
+        Text(
+            stringResource(if (onArtistImages != null) R.string.server_owned_hint_two else R.string.server_owned_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(16.dp),
+        )
+    }
+}
+
+private const val OFF = "off"
+private val ARTIST_IMAGES_CHOICES = listOf(OFF, "small", "full")
+
+/** The words for a format; null for one this build doesn't know, which then
+ * shows as the server sent it. */
+internal fun transcodeLabel(value: String?): Int? = when (value) {
+    null -> R.string.transcode_originals
+    "mp3_320" -> R.string.transcode_mp3_320
+    "mp3_256" -> R.string.transcode_mp3_256
+    "mp3_192" -> R.string.transcode_mp3_192
+    "mp3_128" -> R.string.transcode_mp3_128
+    else -> null
+}
+
+private fun artistImagesLabel(value: String?): Int = when (value) {
+    "small" -> R.string.artist_images_small
+    "full" -> R.string.artist_images_full
+    else -> R.string.artist_images_off
+}

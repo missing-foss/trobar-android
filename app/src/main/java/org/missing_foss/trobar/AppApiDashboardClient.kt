@@ -24,10 +24,17 @@ data class WidgetSettings(
     val coverLimit: Int,
     val months: Map<String, Int>,
     val coverLimits: Map<String, Int> = emptyMap(),
+    val playlistsLimit: Int = WidgetIds.PLAYLISTS_DEFAULT,
 ) {
     val perWidgetCovers: Boolean get() = coverLimits.isNotEmpty()
 
     fun coverLimitOf(id: String): Int = coverLimits[id] ?: coverLimit
+}
+
+/** A playlist with tracks left to sync to a device, for the Playlists widget. */
+data class PlaylistToSync(val id: Long, val title: String, val trackCount: Int, val matchedCount: Int, val toSync: Int) {
+    /** The share of its tracks in the library, as the Playlists tab's bar. */
+    val availability: Float get() = if (trackCount > 0) matchedCount.toFloat() / trackCount else 0f
 }
 
 data class WidgetPrefs(val disabled: List<String>, val order: List<String>, val settings: WidgetSettings)
@@ -85,20 +92,30 @@ class AppApiDashboardClient(context: Context, serverUrl: String, token: String) 
         coverLimit: Int? = null,
         months: Map<String, Int> = emptyMap(),
         coverLimits: Map<String, Int> = emptyMap(),
+        playlistsLimit: Int? = null,
     ): WidgetPrefs {
         val body = JSONObject()
         if (disabled != null) body.put("disabled", JSONArray(disabled))
         if (order != null) body.put("order", JSONArray(order))
-        if (coverLimit != null || months.isNotEmpty() || coverLimits.isNotEmpty()) {
-            val settings = JSONObject()
-            if (coverLimit != null) settings.put("cover_limit", coverLimit)
-            fun entry(widget: String): JSONObject =
-                settings.optJSONObject(widget) ?: JSONObject().also { settings.put(widget, it) }
-            months.forEach { (widget, n) -> entry(widget).put("months", n) }
-            coverLimits.forEach { (widget, n) -> entry(widget).put("cover_limit", n) }
-            body.put("settings", settings)
-        }
+        val settings = JSONObject()
+        if (coverLimit != null) settings.put("cover_limit", coverLimit)
+        fun entry(widget: String): JSONObject =
+            settings.optJSONObject(widget) ?: JSONObject().also { settings.put(widget, it) }
+        months.forEach { (widget, n) -> entry(widget).put("months", n) }
+        coverLimits.forEach { (widget, n) -> entry(widget).put("cover_limit", n) }
+        if (playlistsLimit != null) entry(WidgetIds.PLAYLISTS).put("limit", playlistsLimit)
+        if (settings.length() > 0) body.put("settings", settings)
         return parsePrefs(JSONObject(http.send("PATCH", http.url("dashboard", "widgets"), body, "dashboard/widgets")))
+    }
+
+    /** What has most left to sync to [deviceId], most first. */
+    fun playlistsToSync(deviceId: Long, limit: Int): List<PlaylistToSync> {
+        val url = http.url("dashboard", "playlists", query = mapOf("device_id" to deviceId.toString(), "limit" to limit.toString()))
+        val arr = JSONArray(http.get(url, "dashboard/playlists"))
+        return List(arr.length()) { i ->
+            val o = arr.getJSONObject(i)
+            PlaylistToSync(o.getLong("id"), o.getString("title"), o.optInt("track_count", 0), o.optInt("matched_count", 0), o.optInt("to_sync", 0))
+        }
     }
 
     fun libraryStats(): LibraryStats {
@@ -175,7 +192,10 @@ class AppApiDashboardClient(context: Context, serverUrl: String, token: String) 
         return WidgetPrefs(
             disabled = o.optJSONArray("disabled").strings(),
             order = o.optJSONArray("order").strings(),
-            settings = WidgetSettings(settings.optInt("cover_limit", DEFAULT_COVER_LIMIT), months, coverLimits),
+            settings = WidgetSettings(
+                settings.optInt("cover_limit", DEFAULT_COVER_LIMIT), months, coverLimits,
+                settings.optJSONObject(WidgetIds.PLAYLISTS)?.intOrNull("limit") ?: WidgetIds.PLAYLISTS_DEFAULT,
+            ),
         )
     }
 

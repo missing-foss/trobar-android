@@ -10,6 +10,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # release.yml runs this whole gate, the emulator job included, on the
+  # tagged commit before it opens the draft release.
+  workflow_call:
 
 permissions:
   contents: read
@@ -19,12 +22,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+      # The JDK is the one .tool-versions pins, as on the forge, so the two
+      # CI copies and a local `mise install` can't drift apart.
+      - name: Read the JDK pin from .tool-versions
+        id: tools
+        run: |
+          java=$(awk '/^java /{print $2}' .tool-versions | sed 's/^temurin-//; s/\..*//')
+          [ -n "$java" ] || { echo "::error::no java pin found in .tool-versions"; exit 1; }
+          echo "java=$java" >> "$GITHUB_OUTPUT"
+          # This workflow's own property, asserted here as the forge's ci.yml
+          # does: a literal java-version would quietly stop following the pin.
+          self=.github/workflows/ci.yml
+          [ -r "$self" ] || { echo "::error::cannot read $self to assert it derives its JDK"; exit 1; }
+          grep -qE '^[[:space:]]*java-version:' "$self" || { echo "::error::no java-version key in $self -- this assertion is checking nothing"; exit 1; }
+          if grep -qE "^[[:space:]]*java-version:[[:space:]]*['\"]?[0-9]" "$self"; then
+            echo "::error::$self names a java version literally; it must derive it from .tool-versions"; exit 1
+          fi
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: ${{ steps.tools.outputs.java }}
       - name: Build debug APK
         run: ./gradlew assembleDebug
+      - name: JVM unit tests (no device)
+        run: ./gradlew testDebugUnitTest
       - name: Compile instrumented tests (#96 — catches an androidTest dependency bump, no emulator needed)
         run: ./gradlew assembleDebugAndroidTest
       - name: Static analysis (detekt)
@@ -56,6 +77,22 @@ jobs:
         # via pipx (preinstalled on the runner). The charset-normalizer extra
         # supplies reuse's encoding detection without needing libmagic.
         run: pipx run --spec 'reuse[charset-normalizer]' reuse lint
+      # The forge's guards, so a change from either side meets the same checks
+      # (#169). Each is the forge's own command, and dev/verify.sh's.
+      - name: Vendored guards match their declared versions
+        run: dev/guards/verify-vendored.sh
+      - name: Tracker references in published prose
+        run: python3 dev/guards/check-tracker-refs.py
+      - name: Brand colours (generated, WCAG AA)
+        run: python3 dev/gen_brand_tokens.py --check
+      - name: Single-colour mark (generated, exact geometry)
+        run: python3 dev/gen_mono_mark.py --check
+      - name: Resource strings fit aapt2 (32,767 bytes)
+        run: python3 dev/check_res_attr_size.py
+      - name: Themed icons and launcher components (icon packs)
+        run: python3 dev/guards/check-android-launcher.py
+      - name: Call sites the device tests can't reach (source check)
+        run: python3 dev/check_call_sites.py
 
   # #79: runs the androidTest suite (this repo's only test source set — see
   # #99) on a real emulator. #96/#97 got CI as far as compiling it; nothing
@@ -81,10 +118,26 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+      # The JDK is the one .tool-versions pins, as on the forge, so the two
+      # CI copies and a local `mise install` can't drift apart.
+      - name: Read the JDK pin from .tool-versions
+        id: tools
+        run: |
+          java=$(awk '/^java /{print $2}' .tool-versions | sed 's/^temurin-//; s/\..*//')
+          [ -n "$java" ] || { echo "::error::no java pin found in .tool-versions"; exit 1; }
+          echo "java=$java" >> "$GITHUB_OUTPUT"
+          # This workflow's own property, asserted here as the forge's ci.yml
+          # does: a literal java-version would quietly stop following the pin.
+          self=.github/workflows/ci.yml
+          [ -r "$self" ] || { echo "::error::cannot read $self to assert it derives its JDK"; exit 1; }
+          grep -qE '^[[:space:]]*java-version:' "$self" || { echo "::error::no java-version key in $self -- this assertion is checking nothing"; exit 1; }
+          if grep -qE "^[[:space:]]*java-version:[[:space:]]*['\"]?[0-9]" "$self"; then
+            echo "::error::$self names a java version literally; it must derive it from .tool-versions"; exit 1
+          fi
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: ${{ steps.tools.outputs.java }}
       - name: Pin the AVD root
         # This job's own first runs measured avdmanager silently writing a
         # new AVD under ~/.config/.android/avd (confirmed via `find ~
@@ -199,7 +252,7 @@ jobs:
         run: ./gradlew connectedDebugAndroidTest
       - name: Upload instrumented test results (debugging a failure/flake)
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: androidTest-results
           path: app/build/outputs/androidTest-results/connected

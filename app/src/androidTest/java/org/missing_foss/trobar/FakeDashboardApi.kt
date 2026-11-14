@@ -19,10 +19,14 @@ import org.json.JSONObject
  * which widget fetched. Everything else goes to [base]. */
 class FakeDashboardApi(private val base: FakeAppApi = FakeAppApi()) : Dispatcher() {
     var isAdmin = false
-    val catalog = listOf(
+    var catalog = listOf(
         "library" to false, "devices" to false, "suggestions" to false, "recently_added" to false,
         "recently_released" to false, "most_played" to false, "administration" to true,
     )
+    /** Playlists on the widget, and each (device id, limit) it asked for. */
+    val playlistsToSync = CopyOnWriteArrayList<PlaylistToSync>()
+    val playlistsAsked = CopyOnWriteArrayList<Pair<Long, Int>>()
+    @Volatile var playlistsLimit: Int? = null // absent from the settings until written
     var disabled = mutableListOf<String>()
     var order = mutableListOf<String>()
     var coverLimit = 15
@@ -94,6 +98,7 @@ class FakeDashboardApi(private val base: FakeAppApi = FakeAppApi()) : Dispatcher
                         val entry = s.getJSONObject(w)
                         if (entry.has("months")) months[w] = entry.getInt("months")
                         if (entry.has("cover_limit")) coverLimits[w] = entry.getInt("cover_limit")
+                        if (entry.has("limit")) playlistsLimit = entry.getInt("limit")
                     }
                 }
                 if (!isAdmin && "administration" !in disabled) disabled = (disabled + "administration").sorted().toMutableList()
@@ -109,6 +114,15 @@ class FakeDashboardApi(private val base: FakeAppApi = FakeAppApi()) : Dispatcher
                 })).toString())
             }
             route == "/api/app/admin/counts" -> json("""{"users": $users, "delegations": $delegations}""")
+            route == "/api/app/dashboard/playlists" -> {
+                val url = request.requestUrl!!
+                val limit = url.queryParameter("limit")!!.toInt()
+                playlistsAsked += url.queryParameter("device_id")!!.toLong() to limit
+                json(JSONArray(playlistsToSync.take(limit).map {
+                    JSONObject().put("id", it.id).put("title", it.title).put("track_count", it.trackCount)
+                        .put("matched_count", it.matchedCount).put("to_sync", it.toSync)
+                }).toString())
+            }
             route == "/api/app/library/recently-added" -> {
                 monthsAsked.computeIfAbsent("recently_added") { CopyOnWriteArrayList() } += request.requestUrl!!.queryParameter("months")!!.toInt()
                 json(cards(recentlyAdded, "added_at"))
@@ -139,6 +153,7 @@ class FakeDashboardApi(private val base: FakeAppApi = FakeAppApi()) : Dispatcher
                 (settings.optJSONObject(w) ?: JSONObject().also { settings.put(w, it) }).put("cover_limit", coverLimits[w] ?: coverLimit)
             }
         }
+        playlistsLimit?.let { settings.put("playlists", JSONObject().put("limit", it)) }
         // The one value, as the server answers it: Suggestions' count.
         settings.put("cover_limit", if (perWidgetCovers) coverLimits["suggestions"] ?: coverLimit else coverLimit)
         return JSONObject().put("disabled", JSONArray(disabled)).put("order", JSONArray(order)).put("settings", settings).toString()

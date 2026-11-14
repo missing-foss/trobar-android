@@ -40,6 +40,9 @@ step() { echo; echo "== $1 =="; }
 step "debug build"
 ./gradlew assembleDebug && echo ok || fail=1
 
+step "JVM unit tests (app/src/test, no device)"
+./gradlew testDebugUnitTest && echo ok || fail=1
+
 step "static analysis (detekt)"
 ./gradlew detekt && echo ok || fail=1
 
@@ -56,27 +59,17 @@ python3 dev/gen_mono_mark.py --check || fail=1
 
 step "resource strings fit aapt2 (32,767 bytes)"
 # A longer attribute (a vector's pathData, say) compiles to STRING_TOO_LARGE
-# with only a warning; the drawable then fails to inflate at runtime.
-python3 - <<'PY' || fail=1
-import pathlib, re, sys
-files = sorted(pathlib.Path("app/src/main/res").rglob("*.xml"))
-bad = [(str(f), len(v.encode()))
-       for f in files
-       for v in re.findall(r'="([^"]*)"', f.read_text(encoding="utf-8"))
-       if len(v.encode()) > 32767]
-for f, n in bad:
-    print(f"FAIL: {f}: an attribute of {n} bytes")
-if not files:
-    print("FAIL: no resource XML found")
-if bad or not files:
-    sys.exit(1)
-print(f"ok ({len(files)} files)")
-PY
+# with only a warning; the drawable then fails to inflate at runtime. The same
+# script runs in the forge's CI.
+python3 dev/check_res_attr_size.py || fail=1
 
 step "translations (EN/FR parity — MissingTranslation lint, #52)"
 # A new string without a values-fr/ counterpart (or a dangling FR whose EN was
 # removed) fails the build — scoped to those two lint checks in build.gradle.kts.
 ./gradlew lintDebug && echo ok || fail=1
+
+step "call sites the device tests can't reach (source check)"
+python3 dev/check_call_sites.py || fail=1
 
 step "leak scan (strings that must never ship)"
 # The pattern list is NOT in this repository. A denylist that ships the terms
@@ -170,6 +163,9 @@ step "vendored guards match their declared versions"
 # nothing reporting it, is why the canonical repository exists.
 dev/guards/verify-vendored.sh || fail=1
 
+step "themed icons and launcher components (icon packs)"
+python3 dev/guards/check-android-launcher.py || fail=1
+
 step "Tracker references in published prose"
 # Public docs must stand alone: an issue number that outlives the tracker it
 # points at is worse than no citation. Excludes fenced blocks, inline code, hex
@@ -190,12 +186,17 @@ step "Toolchain pin agrees with CI"
 if [ -f .tool-versions ]; then
   tv_java=$(awk '/^java /{print $2}' .tool-versions | sed 's/^temurin-//; s/\..*//')
   ci_java=$(grep -hoE 'java-version: *"?[0-9]+' .github/workflows/*.yml 2>/dev/null | grep -oE '[0-9]+' | sort -u)
+  # A workflow that reads the pin from .tool-versions, and asserts in its own
+  # run that it names no literal (see .github/workflows/ci.yml), can't drift.
+  ci_derived=$(grep -lE 'java-version: *\$\{\{ *steps\.tools\.outputs\.java *\}\}' .github/workflows/*.yml 2>/dev/null)
   # Both sides must be READABLE before agreement means anything. The previous
   # form guarded with [ -n "$ci_java" ] and fell through to `ok`, so a mirror
   # workflow that stopped naming a version -- or stopped existing -- turned
   # this into a step that compared nothing and reported success.
   if [ -z "$tv_java" ]; then
     echo "FAIL: .tool-versions exists but names no java pin"; fail=1
+  elif [ -z "$ci_java" ] && [ -n "$ci_derived" ]; then
+    echo "ok (java $tv_java; .github/workflows derives it from .tool-versions: $(echo $ci_derived))"
   elif [ -z "$ci_java" ]; then
     echo "FAIL: no java-version found in .github/workflows -- nothing to compare against"; fail=1
   elif [ "$(printf '%s' "$ci_java" | wc -l)" -gt 0 ]; then

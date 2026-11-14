@@ -50,6 +50,9 @@ class BasketScreenTest {
     private lateinit var api: FakeAppApi
     private var syncNowCalls = 0
     private var showSyncCalls = 0
+    private val sentAll = mutableListOf<Pair<String, Boolean>>()
+    private lateinit var shared: AppState
+    private var syncBlock: Int? = null
 
     @Before
     fun startServer() {
@@ -60,6 +63,8 @@ class BasketScreenTest {
         }
         syncNowCalls = 0
         showSyncCalls = 0
+        sentAll.clear()
+        syncBlock = null
         api = FakeAppApi()
         server = MockWebServer()
         server.dispatcher = api
@@ -88,11 +93,16 @@ class BasketScreenTest {
 
     private fun setScreen(fontScale: Float? = null) {
         val pairing = Prefs.Pairing(serverUrl = server.url("/").toString(), token = "test-token")
+        shared = testAppState(context, pairing)
         compose.setContent {
             val density = LocalDensity.current
-            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale ?: density.fontScale)) {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density.density, fontScale ?: density.fontScale),
+                LocalManualSync provides ManualSync(start = {}, blockedBy = { syncBlock }),
+            ) {
                 MaterialTheme {
-                    BasketScreen(pairing = pairing, onBack = {}, onSyncNow = { syncNowCalls++ }, onShowSync = { showSyncCalls++ }, shared = testAppState(context, pairing))
+                    BasketScreen(pairing = pairing, onBack = {}, onSyncNow = { syncNowCalls++ }, onShowSync = { showSyncCalls++ },
+                        shared = shared, onSentAll = { message, offer -> sentAll += message to offer })
                 }
             }
         }
@@ -213,6 +223,75 @@ class BasketScreenTest {
         compose.onNodeWithText("1 item could not be sent and stays in the basket.", substring = true).assertIsDisplayed()
         assertEquals(listOf(listOf(2L)), api.sends)
         assertEquals(0, syncNowCalls)
+        assertEquals("something was skipped: the basket stays", emptyList<Pair<String, Boolean>>(), sentAll)
+    }
+
+    @Test
+    fun sendingAnotherDeviceWithNothingLeftHandsTheMessageBack() {
+        api.stage(10, "Alpha||X", 2)
+        setScreen()
+        waitForSend("Car").performClick()
+        compose.waitUntil(timeoutMillis = 30_000) { sentAll.isNotEmpty() }
+        assertEquals(listOf("Sent 1 selection to Car." to false), sentAll)
+        assertEquals(0, syncNowCalls)
+        // Said once, where the user goes back to: not here as well.
+        compose.onAllNodesWithText("Sent 1 selection", substring = true).assertCountEquals(0)
+        assertEquals("a send elsewhere leaves Home's grids alone", 0, shared.state.value.thisPhoneSelections)
+    }
+
+    @Test
+    fun sendingThisPhoneWithNothingLeftStartsTheSyncAndHandsBackTheOffer() {
+        api.stage(10, "Alpha||X", 1)
+        api.stage(11, "Alpha||Y", 1)
+        setScreen()
+        waitForSend("Pixel").performClick()
+        compose.waitUntil(timeoutMillis = 30_000) { sentAll.isNotEmpty() }
+        assertEquals(listOf("Sent 2 selections to Pixel. The sync has started." to true), sentAll)
+        assertEquals(1, syncNowCalls)
+        assertEquals(0, showSyncCalls)
+        assertEquals("Home reads its grids again", 1, shared.state.value.thisPhoneSelections)
+    }
+
+    @Test
+    fun aHeldBackSyncStaysOnTheBasketAndSaysWhy() {
+        syncBlock = R.string.sync_blocked_needs_unmetered
+        api.stage(10, "Alpha||X", 1)
+        setScreen()
+        waitForSend("Pixel").performClick()
+        waitForText("Sent 1 selection to Pixel.")
+        compose.onNodeWithText("unmetered connection", substring = true).assertIsDisplayed()
+        assertEquals("nothing left, but held back: the reason stays in view", emptyList<Pair<String, Boolean>>(), sentAll)
+        assertEquals(0, syncNowCalls)
+    }
+
+    @Test
+    fun aSendWhoseReadBackFailsStaysOnTheBasketAndSaysSo() {
+        api.stage(10, "Alpha||X", 2)
+        api.basketReadFailsAfterSend = true
+        setScreen()
+        waitForSend("Car").performClick()
+        // Two messages, one after the other in either order: what was sent, and
+        // that the basket could not be read back. Both must be seen.
+        val wanted = listOf("Sent 1 selection to Car.", "basket read failed")
+        val seen = mutableSetOf<String>()
+        compose.waitUntil(timeoutMillis = 30_000) {
+            wanted.filterTo(seen) { compose.onAllNodesWithText(it, substring = true).fetchSemanticsNodes().isNotEmpty() }
+            seen.size == wanted.size
+        }
+        assertEquals(listOf(listOf(2L)), api.sends)
+        assertEquals("the read-back failed: the basket stays", emptyList<Pair<String, Boolean>>(), sentAll)
+        compose.onNodeWithText("Basket · 1 item").assertIsDisplayed()
+    }
+
+    @Test
+    fun aSendThatLeavesAnotherDevicesSectionStaysOnTheBasket() {
+        api.stage(10, "Alpha||X", 2)
+        api.stage(11, "Alpha||Y", 1)
+        setScreen()
+        waitForSend("Car").performClick()
+        waitForText("Sent 1 selection to Car.")
+        waitForSend("Pixel").assertIsDisplayed() // what is left to send is still in view
+        assertEquals(emptyList<Pair<String, Boolean>>(), sentAll)
     }
 
     @Test
@@ -231,6 +310,7 @@ class BasketScreenTest {
         assertEquals(0, showSyncCalls) // started where the user is; the sync is shown only when asked
         compose.onNodeWithText("Show").performClick()
         compose.waitUntil(timeoutMillis = 30_000) { showSyncCalls == 1 }
+        assertEquals("something was skipped: the basket stays", emptyList<Pair<String, Boolean>>(), sentAll)
     }
 
     @Test

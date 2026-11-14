@@ -26,6 +26,7 @@ import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
@@ -70,6 +71,7 @@ class AppShellTest {
 
     private lateinit var server: MockWebServer
     private lateinit var appApi: FakeDashboardApi
+    private var syncNowCalls = 0
     private lateinit var library: FakeAppApi
     private lateinit var playlists: FakePlaylistApi
     @Volatile private var deviceInfoCode = 200
@@ -118,7 +120,10 @@ class AppShellTest {
         val pairing = Prefs.Pairing(serverUrl = serverUrl, token = "test-token")
         compose.setContent {
             val density = LocalDensity.current
-            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale ?: density.fontScale)) {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density.density, fontScale ?: density.fontScale),
+                LocalManualSync provides ManualSync(start = { syncNowCalls++ }),
+            ) {
                 MaterialTheme {
                     Box(if (widthDp != null) Modifier.requiredWidth(widthDp.dp) else Modifier) {
                         AppShell(
@@ -442,6 +447,30 @@ class AppShellTest {
         compose.onNodeWithText("Retry").assertIsDisplayed()
     }
 
+    @Test
+    fun fromLevel7HomeAndASelectionRemovalWorkThroughTheRealShell() {
+        // Everything real between the screens: the factory's level, the
+        // shell's wiring of a removal to the shared holder, Home's re-read.
+        appApiLevel = APP_API_HOME_LEAVES_OUT_THIS_PHONE
+        library.selections += FakeAppApi.FakeSelection(5, "album", "Aphelion||Parallax", "Parallax", 1)
+        // Home is a lazy list: only the widgets this needs, so all of them are on screen.
+        appApi.disabled = mutableListOf("library", "suggestions", "recently_released", "most_played")
+        setShell()
+        // The level reached Home through its factory: the level-7 empty text.
+        compose.waitForText("Nothing recently added that isn't already on Pixel.")
+        val before = appApi.hits("/api/app/library/recently-added")
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { compose.onAllNodes(hasTestTag("device-1")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("device-1").performClick()
+        compose.waitForText("Parallax")
+        compose.onNodeWithTag("selection_remove_5").performClick()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) {
+            compose.onAllNodes(hasTestTag("selection_remove_confirm")).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("selection_remove_confirm").performClick()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { library.selectionRemovals.isNotEmpty() }
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { appApi.hits("/api/app/library/recently-added") > before }
+    }
+
     private fun hasTestTagStartingWith(prefix: String) = SemanticsMatcher("test tag starts with $prefix") {
         it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith(prefix) == true
     }
@@ -474,6 +503,43 @@ class AppShellTest {
         compose.waitForText("Search artists and albums")
         compose.waitUntil(timeoutMillis = UI_WAIT_MS) { compose.onAllNodes(basketBadge(1)).fetchSemanticsNodes().isNotEmpty() }
         assertEquals("a tab switch reads no basket", basketReads, appApi.hits("/api/app/basket"))
+    }
+
+    @Test
+    fun aSendThatEmptiesTheBasketGoesBackAndSaysSoThere() {
+        library.stage(10, "Alpha||X", 2)
+        setShell()
+        compose.waitForText("1 hour of music")
+        compose.onNodeWithContentDescription("Basket").performClick()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) {
+            compose.onAllNodesWithContentDescription("Send Car").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription("Send Car").performClick()
+        // Back where the basket was opened from, the tabs again, and the message there.
+        compose.waitForText("Sent 1 selection to Car.")
+        tab("Home").assertIsSelected()
+        compose.onAllNodesWithText("Nothing staged", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun aSendToThisPhoneGoesBackAndItsShowLeadsToTheSync() {
+        // The emulator's network counts as any of the modes.
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        runBlocking { Prefs.setNetworkMode(context, Prefs.NETWORK_ANY) }
+        library.stage(10, "Alpha||X", 1)
+        setShell()
+        compose.waitForText("1 hour of music")
+        compose.onNodeWithContentDescription("Basket").performClick()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) {
+            compose.onAllNodesWithContentDescription("Send Pixel").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription("Send Pixel").performClick()
+        compose.waitForText("Sent 1 selection to Pixel. The sync has started.")
+        tab("Home").assertIsSelected()
+        assertEquals(1, syncNowCalls)
+        compose.onNodeWithText("Show").performClick()
+        compose.waitForText("Sync now")
+        tab("Settings").assertIsSelected()
     }
 
     @Test
@@ -544,9 +610,9 @@ class AppShellTest {
         waitForSelector("Pixel") // this phone: the fake's whoami device
         selector("Pixel").performClick()
         // Every device, the current one marked; no name in the bar itself.
-        compose.onNode(hasText("Car") and hasClickAction()).assertIsDisplayed()
+        compose.onNode(hasText("Car") and hasClickAction() and hasAnyAncestor(isPopup())).assertIsDisplayed()
         compose.onNodeWithContentDescription("Current destination").assertIsDisplayed()
-        compose.onNode(hasText("Car") and hasClickAction()).performClick()
+        compose.onNode(hasText("Car") and hasClickAction() and hasAnyAncestor(isPopup())).performClick()
         waitForSelector("Car")
         tab("Library").performClick()
         compose.waitForText("Search artists and albums")

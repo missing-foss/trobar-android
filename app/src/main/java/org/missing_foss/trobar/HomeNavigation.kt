@@ -7,4 +7,6 @@ class HomeNavigation(
     val onOpenBasket: () -> Unit,
     val onOpenPrefs: () -> Unit,
     val onOpenLibrary: () -> Unit,
+    val onOpenDevice: (Long) -> Unit = {},
+    val onOpenPlaylists: () -> Unit = {},
 )

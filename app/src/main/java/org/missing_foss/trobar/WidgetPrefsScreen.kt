@@ -73,6 +73,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
@@ -175,6 +176,7 @@ private class WidgetRowState(
     val id: String,
     val months: Int?,
     val coverLimit: Int,
+    val playlistsLimit: Int,
     val first: Boolean,
     val last: Boolean,
 )
@@ -185,6 +187,7 @@ private fun WidgetRow(
     onMove: (up: Boolean) -> Unit,
     onMonths: (Int) -> Unit,
     onCoverLimit: (Int) -> Unit,
+    onPlaylistsLimit: (Int) -> Unit,
     handle: Modifier,
 ) {
     val id = row.id
@@ -242,6 +245,21 @@ private fun WidgetRow(
                 IconButton(onClick = { onMonths(value + 1) }, enabled = value < WidgetIds.MONTHS_RANGE.last) { Text("+") }
             }
         }
+        if (id == WidgetIds.PLAYLISTS) {
+            val value = row.playlistsLimit
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 8.dp).testTag("playlists_limit")) {
+                Text(stringResource(R.string.widget_playlists_how_many), style = MaterialTheme.typography.bodySmall)
+                val fewer = stringResource(R.string.widget_playlists_fewer)
+                IconButton(
+                    onClick = { onPlaylistsLimit(value - 1) }, enabled = value > WidgetIds.PLAYLISTS_RANGE.first,
+                    modifier = Modifier.semantics { contentDescription = fewer },
+                ) { Text("−") }
+                Text(value.toString(), style = MaterialTheme.typography.bodyMedium)
+                IconButton(
+                    onClick = { onPlaylistsLimit(value + 1) }, enabled = value < WidgetIds.PLAYLISTS_RANGE.last,
+                ) { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.widget_playlists_more)) }
+            }
+        }
         if (id in WidgetIds.COVER_WIDGETS) {
             // This widget's own cover count. A FlowRow: at 320 dp and 2.0x
             // the four chips do not fit one line, and a Row squeezed the last
@@ -296,11 +314,13 @@ private fun WidgetList(
                                 row = WidgetRowState(
                                     id, months = state.prefs.settings.months[id],
                                     coverLimit = state.prefs.settings.coverLimitOf(id),
+                                    playlistsLimit = state.prefs.settings.playlistsLimit,
                                     first = index == 0, last = index == ordered.lastIndex,
                                 ),
                                 onMove = { up -> vm.move(id, up) },
                                 onMonths = { vm.setMonths(id, it) },
                                 onCoverLimit = { vm.setCoverLimit(id, it) },
+                                onPlaylistsLimit = vm::setPlaylistsLimit,
                                 handle = Modifier.dragHandle(drag, id, ordered) { from, to -> vm.moveTo(from, to) },
                             )
                         }
@@ -382,102 +402,3 @@ private fun AddWidgetSheet(ids: List<String>, historyConfigured: Map<String, Boo
 /** The server's default when a user never set a months value. */
 private const val DEFAULT_MONTHS = 3
 
-/**
- * One drag of a widget row by its handle: which row, how far it has moved
- * (px), each row's height as last laid out, and where the finger is on
- * screen, for the auto-scroll. The row follows the finger; the rows it
- * passes shift to show where it will land; on release the whole order is
- * written once.
- */
-private class RowDrag {
-    var id by mutableStateOf<String?>(null)
-    var offset by mutableFloatStateOf(0f)
-    var from = -1
-    var pointerY by mutableFloatStateOf(Float.NaN)
-    var viewport: Rect = Rect.Zero
-    val heights = mutableMapOf<String, Int>()
-
-    /** Where the dragged row would land now, among [order]. */
-    fun target(order: List<String>): Int {
-        var to = from
-        var travelled = 0f
-        if (offset > 0) {
-            for (j in from + 1 until order.size) {
-                val h = heights[order[j]] ?: break
-                if (offset > travelled + h / 2f) to = j else break
-                travelled += h
-            }
-        } else if (offset < 0) {
-            for (j in from - 1 downTo 0) {
-                val h = heights[order[j]] ?: break
-                if (-offset > travelled + h / 2f) to = j else break
-                travelled += h
-            }
-        }
-        return to
-    }
-
-    /** How far the row at [index] moves aside for the dragged one. */
-    fun shiftFor(index: Int, order: List<String>): Float {
-        val dragged = id ?: return 0f
-        val h = heights[dragged]?.toFloat() ?: return 0f
-        val to = target(order)
-        return when {
-            index in (from + 1)..to -> -h
-            index in to until from -> h
-            else -> 0f
-        }
-    }
-}
-
-/** The handle's gesture: a drag moves the row, and the drop moves the widget. */
-private fun Modifier.dragHandle(drag: RowDrag, id: String, order: List<String>, onDrop: (String, Int) -> Unit): Modifier {
-    var coordinates: LayoutCoordinates? = null
-    return onGloballyPositioned { coordinates = it }.pointerInput(id, order) {
-        detectDragGestures(
-            onDragStart = {
-                drag.id = id
-                drag.from = order.indexOf(id)
-                drag.offset = 0f
-                drag.pointerY = Float.NaN
-            },
-            onDrag = { change, amount ->
-                change.consume()
-                drag.offset += amount.y
-                drag.pointerY = coordinates?.localToWindow(change.position)?.y ?: Float.NaN
-            },
-            onDragEnd = {
-                val to = drag.target(order)
-                drag.id = null
-                if (to != drag.from) onDrop(id, to)
-            },
-            onDragCancel = { drag.id = null },
-        )
-    }
-}
-
-/** While a row is dragged near the top or bottom of the screen, the list
- * scrolls under it, and the row keeps its place under the finger. */
-@Composable
-private fun AutoScrollWhileDragging(drag: RowDrag, scroll: ScrollState) {
-    val edge = with(LocalDensity.current) { AUTO_SCROLL_EDGE.toPx() }
-    val step = with(LocalDensity.current) { AUTO_SCROLL_STEP.toPx() }
-    LaunchedEffect(drag.id) {
-        while (drag.id != null) {
-            val y = drag.pointerY
-            val v = drag.viewport
-            val delta = when {
-                y.isNaN() -> 0f
-                y < v.top + edge -> -step
-                y > v.bottom - edge -> step
-                else -> 0f
-            }
-            if (delta != 0f) drag.offset += scroll.scrollBy(delta)
-            delay(AUTO_SCROLL_FRAME_MS)
-        }
-    }
-}
-
-private val AUTO_SCROLL_EDGE = 48.dp
-private val AUTO_SCROLL_STEP = 6.dp
-private const val AUTO_SCROLL_FRAME_MS = 16L

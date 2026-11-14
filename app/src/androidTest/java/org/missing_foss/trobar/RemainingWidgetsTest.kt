@@ -101,7 +101,7 @@ class RemainingWidgetsTest {
             ) {
                 MaterialTheme {
                     Box(if (widthDp != null) Modifier.requiredWidth(widthDp.dp) else Modifier) {
-                        HomeScreen(pairing = pairing, nav = HomeNavigation({}, {}, {}), shared = shared, vm = vm)
+                        HomeScreen(pairing = pairing, nav = HomeNavigation({}, {}, {}, { openedDevice = it }), shared = shared, vm = vm)
                     }
                 }
             }
@@ -121,7 +121,7 @@ class RemainingWidgetsTest {
     }
 
     private fun inDevice(id: Long, text: String, substring: Boolean = false) =
-        compose.onAllNodes(hasText(text, substring = substring) and hasAnyAncestor(hasTestTag("device-$id")))
+        compose.onAllNodes(hasText(text, substring = substring) and hasAnyAncestor(hasTestTag("device-$id")), useUnmergedTree = true)
 
     @Test
     fun theLibraryWidgetShowsTheCountsTheHoursAndBothCharts() {
@@ -163,6 +163,18 @@ class RemainingWidgetsTest {
         compose.onNodeWithTag("chart-by-format").assertIsDisplayed() // a zero column, drawn
         compose.onAllNodesWithText("BY DECADE").assertCountEquals(0) // nothing to chart: no section
         compose.onAllNodesWithTag("chart-by-decade").assertCountEquals(0)
+    }
+
+    private var openedDevice: Long? = null
+
+    @Test
+    fun tappingADeviceOpensWhatIsSelectedForIt() {
+        only("devices")
+        setScreen()
+        compose.waitForText("Car")
+        compose.onNodeWithTag("device-2").performClick()
+        compose.waitForIdle()
+        assertEquals(2L, openedDevice)
     }
 
     @Test

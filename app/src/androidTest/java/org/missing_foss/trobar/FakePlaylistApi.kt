@@ -49,7 +49,17 @@ class FakePlaylistApi(val base: FakeAppApi = FakeAppApi()) : Dispatcher() {
 
     // MockWebServer answers each connection on its own thread: thread-safe.
     val playlists = CopyOnWriteArrayList<Playlist>()
-    val entries = mutableMapOf<Long, List<PlaylistEntry>>()
+    val entries: MutableMap<Long, List<PlaylistEntry>> = java.util.concurrent.ConcurrentHashMap()
+    val puts = CopyOnWriteArrayList<Pair<Long, List<Long>>>() // (playlist, entry ids), each PUT as sent
+    val deletedPlaylists = CopyOnWriteArrayList<Long>()
+    @Volatile var holdPuts: java.util.concurrent.CountDownLatch? = null // a PUT waits for it: a slow server
+    @Volatile var holdDeletes: java.util.concurrent.CountDownLatch? = null // a DELETE of a playlist waits for it
+    val deletesAsked = AtomicInteger(0)
+    @Volatile var putStatus: Int? = null // a PUT answers this instead
+    @Volatile var getStatus: Int? = null // a GET of the tracks answers this instead
+    @Volatile var deleteStatus: Int? = null // a DELETE answers this instead
+    @Volatile var isAdmin = false
+    private val nextEntry = AtomicInteger(1_000)
     @Volatile var running = false
     @Volatile var syncPolls = 2 // status reads a started sync stays running for
     val syncAdds = CopyOnWriteArrayList<Playlist>()
@@ -62,6 +72,7 @@ class FakePlaylistApi(val base: FakeAppApi = FakeAppApi()) : Dispatcher() {
     class Subscription(
         val id: Long, val url: String, var title: String?, var trackCount: Int?, var matchedCount: Int?,
         var lastError: String? = null, var lastSyncedAt: String? = "2026-09-24 04:45:12", val playlistId: Long? = null,
+        val provider: String = "ytmusic",
     )
     val subscriptions = CopyOnWriteArrayList<Subscription>()
     val subscribeBodies = CopyOnWriteArrayList<String>() // the url of each POST, as sent
@@ -99,7 +110,7 @@ class FakePlaylistApi(val base: FakeAppApi = FakeAppApi()) : Dispatcher() {
             method == "PATCH" && Regex("/api/app/playlists/(\\d+)").matches(path) -> {
                 val id = path.split('/')[4].toLong()
                 val body = JSONObject(request.body.readUtf8()).also { shareBodies += it }
-                playlists.first { it.id == id }.shared = body.getBoolean("shared")
+                if (body.has("shared")) playlists.first { it.id == id }.shared = body.getBoolean("shared")
                 json("""{"status": "ok"}""")
             }
             Regex("/api/app/playlists/(\\d+)/unresolved-tracks").matches(path) -> {
@@ -132,12 +143,30 @@ class FakePlaylistApi(val base: FakeAppApi = FakeAppApi()) : Dispatcher() {
                     .put("lidarr_request_last_error", if (p.lidarrEnabled) error ?: JSONObject.NULL else JSONObject.NULL)
                     .put("lidarr_request_last_error_code", if (p.lidarrEnabled) code ?: JSONObject.NULL else JSONObject.NULL).toString())
             }
+            method == "POST" && path == "/api/app/playlists" -> {
+                val title = JSONObject(request.body.readUtf8()).getString("title")
+                val id = 500L + playlists.size
+                playlists += Playlist(id, title, trackCount = 0, matchedCount = 0, provider = "trobar")
+                entries[id] = emptyList()
+                MockResponse().setResponseCode(201).setBody(JSONObject().put("id", id).put("title", title).toString())
+            }
+            path == "/api/app/whoami" -> json(
+                """{"user_id": 1, "username": "alice", "is_admin": $isAdmin, "device_id": 1, "device_name": "Phone"}""",
+            )
+            method == "DELETE" && Regex("/api/app/playlists/(\\d+)").matches(path) -> {
+                deletesAsked.incrementAndGet()
+                holdDeletes?.await(HOLD_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+                deleteStatus?.let { return MockResponse().setResponseCode(it).setBody("""{"error": "delete failed"}""") }
+                val id = path.split('/')[4].toLong()
+                playlists.removeAll { it.id == id }
+                deletedPlaylists += id
+                MockResponse().setBody("""{"status": "ok"}""")
+            }
+            method == "PUT" && Regex("/api/app/playlists/(\\d+)/tracks").matches(path) -> replaceEntries(request, path)
             Regex("/api/app/playlists/(\\d+)/tracks").matches(path) -> {
                 val id = Regex("/api/app/playlists/(\\d+)/tracks").find(path)!!.groupValues[1].toLong()
-                json(JSONArray(entries[id].orEmpty().map { e ->
-                    JSONObject().put("position", e.position).put("artist", e.artist ?: JSONObject.NULL).put("title", e.title ?: JSONObject.NULL)
-                        .put("album", e.album ?: JSONObject.NULL).put("matched", e.matched)
-                }).toString())
+                getStatus?.let { return MockResponse().setResponseCode(it).setBody("""{"error": "gone"}""") }
+                json(JSONArray(entries[id].orEmpty().map(::wireEntry)).toString())
             }
             path == "/api/app/playlist-subscriptions" && method == "GET" ->
                 json(JSONObject().put("subscriptions", JSONArray(subscriptions.map(::wireSub))).toString())
@@ -178,8 +207,34 @@ class FakePlaylistApi(val base: FakeAppApi = FakeAppApi()) : Dispatcher() {
         }
     }
 
+    /** As the server does: only ids of the list as it stands are taken, and
+     * every entry comes back with a fresh id. */
+    private fun replaceEntries(request: RecordedRequest, path: String): MockResponse {
+        val id = path.split('/')[4].toLong()
+        val items = JSONObject(request.body.readUtf8()).getJSONArray("items")
+        val asked = List(items.length()) { items.getJSONObject(it).getLong("entry_id") }
+        puts += id to asked
+        holdPuts?.await(HOLD_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+        putStatus?.let { return MockResponse().setResponseCode(it).setBody("""{"error": "put failed"}""") }
+        val current = entries[id].orEmpty()
+        if (asked.any { a -> current.none { it.entryId == a } }) {
+            return MockResponse().setResponseCode(400).setBody("""{"error": "not on this playlist"}""")
+        }
+        val fresh = asked.mapIndexed { i, a ->
+            current.first { it.entryId == a }.copy(position = i + 1, entryId = nextEntry.incrementAndGet().toLong())
+        }
+        entries[id] = fresh
+        return MockResponse().setBody(JSONObject().put("status", "ok").put("entries", JSONArray(fresh.map(::wireEntry))).toString())
+    }
+
+    private fun wireEntry(e: PlaylistEntry) = JSONObject()
+        .put("position", e.position).put("artist", e.artist ?: JSONObject.NULL).put("title", e.title ?: JSONObject.NULL)
+        .put("album", e.album ?: JSONObject.NULL).put("matched", e.matched).put("track_id", e.trackId ?: JSONObject.NULL)
+        .put("library_artist", e.libraryArtist ?: JSONObject.NULL).put("library_album", e.libraryAlbum ?: JSONObject.NULL)
+        .put("entry_id", e.entryId ?: JSONObject.NULL)
+
     private fun wireSub(s: Subscription) = JSONObject()
-        .put("id", s.id).put("url", s.url).put("provider", "ytmusic").put("title", s.title ?: JSONObject.NULL)
+        .put("id", s.id).put("url", s.url).put("provider", s.provider).put("title", s.title ?: JSONObject.NULL)
         .put("last_synced_at", s.lastSyncedAt ?: JSONObject.NULL).put("last_error", s.lastError ?: JSONObject.NULL)
         .put("last_error_at", JSONObject.NULL).put("track_count", s.trackCount ?: JSONObject.NULL)
         .put("matched_count", s.matchedCount ?: JSONObject.NULL)
@@ -198,3 +253,5 @@ class FakePlaylistApi(val base: FakeAppApi = FakeAppApi()) : Dispatcher() {
 
     private fun json(body: String) = MockResponse().setResponseCode(200).setHeader("Content-Type", "application/json").setBody(body)
 }
+
+private const val HOLD_SECONDS = 20L

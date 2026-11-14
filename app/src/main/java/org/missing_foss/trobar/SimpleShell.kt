@@ -119,8 +119,18 @@ private fun SimpleSyncScreen(
 ) {
     val context = LocalContext.current
     var storage by remember { mutableStateOf<StorageStats?>(null) }
+    val thanksCardShown by Prefs.thanksCardShown(context).collectAsState(initial = false)
     LaunchedEffect(treeUri) {
         storage = withContext(Dispatchers.IO) { storageStatsForTree(context, Uri.parse(treeUri)) }
+    }
+    // The device's storage limit, set on the server, so the card can warn
+    // when it is more than the folder can hold: on a DAP that's the warning
+    // that matters most. Unknown (offline, or no limit) shows no warning.
+    var limitBytes by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(pairing) {
+        limitBytes = try {
+            withContext(Dispatchers.IO) { ApiClient(context, pairing.serverUrl, pairing.token).getDeviceInfo().maxSizeBytes }
+        } catch (ignored: Exception) { null }
     }
     Scaffold(
         topBar = {
@@ -149,10 +159,12 @@ private fun SimpleSyncScreen(
                 // Settings, which shows the repair screen.
                 if (probe.state != ConnState.OK) SyncIndicator(syncStatus, probe.state, onOpen = onOpenSettings)
                 SyncStatusCard(pairing, syncStatus)
+                // Only when due: an empty child would still take a gap.
+                if (thanksCardShown) ThanksCardIfDue()
                 storage?.let { stats ->
                     SectionLabel(stringResource(R.string.section_storage))
                     ElevatedCard(Modifier.fillMaxWidth()) {
-                        StorageUsage(stats, limitBytes = null, modifier = Modifier.padding(16.dp))
+                        StorageUsage(stats, limitBytes = limitBytes, modifier = Modifier.padding(16.dp))
                     }
                 }
             }

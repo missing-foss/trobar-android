@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -28,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ShoppingBasket
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
@@ -50,6 +53,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalContext
@@ -67,9 +71,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 /** The Library tab: every artist, searched and sorted on the phone; one
  * artist's albums as a list or a cover grid per the profile's view mode,
- * with similar artists in the library under the name; a double-tap on
- * an album stages it for the header's device, its cover flying to the
- * basket. Master and detail are two pages on a phone-width window and
+ * with similar artists in the library under the name; a tap on an album
+ * opens it, and a double-tap stages it for the header's device, its cover
+ * flying to the basket. Master and detail are two pages on a phone-width window and
  * side by side above it; the state is the ViewModel's, so rotation and
  * tab switches keep the artist and the search. */
 @Composable
@@ -94,6 +98,16 @@ fun LibraryScreen(
     val answer = rememberStageAnswer(flight, snackbar)
     val stage: StageAt = { type, target, coverUrl, from -> answer(vm.stage(type, target), coverUrl, from) }
     val artistOpen = state.selectedArtist != null
+    val albumOpen = artistOpen && state.openAlbum != null
+    val addedMessage = state.addedTo?.let { stringResource(R.string.album_track_added, it) }
+
+    // Another tab sent the user here: a Playlists entry's artist or album.
+    LaunchedEffect(sharedState.libraryTarget) {
+        sharedState.libraryTarget?.let {
+            vm.open(it)
+            shared.libraryTargetOpened()
+        }
+    }
 
     state.error?.let { message ->
         LaunchedEffect(message) {
@@ -101,16 +115,24 @@ fun LibraryScreen(
             vm.consumeError()
         }
     }
+    addedMessage?.let { message ->
+        LaunchedEffect(message) {
+            snackbar.showSnackbar(message)
+            vm.consumeAddedTo()
+        }
+    }
     // On a phone the artist pane is a page over the list: back returns to the list, not to the previous tab.
-    BackHandler(enabled = compact && artistOpen) { vm.selectArtist(null) }
+    BackHandler(enabled = compact && artistOpen && !albumOpen) { vm.selectArtist(null) }
+    // An open album is a page over its artist on every width.
+    BackHandler(enabled = albumOpen) { vm.closeAlbum() }
     TabDrillDownOpen(Routes.LIBRARY, compact && artistOpen)
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
                 LibraryTopBar(
-                    drillDown = compact && artistOpen,
-                    onBack = { vm.selectArtist(null) },
+                    drillDown = albumOpen || compact && artistOpen,
+                    onBack = { if (albumOpen) vm.closeAlbum() else vm.selectArtist(null) },
                     basketCount = state.basket.size,
                     onOpenBasket = onOpenBasket,
                     shared = sharedState,
@@ -187,13 +209,21 @@ private fun LibraryTopBar(
 
 @Composable
 private fun ArtistList(state: LibraryUiState, vm: LibraryViewModel, cover: Covers) {
-    val artists = state.visibleArtists
+    // Filtered and sorted once for what changes it, not on every recomposition.
+    val artists = remember(state.artists, state.query, state.sort) { state.visibleArtists }
     Column(Modifier.fillMaxSize()) {
         OutlinedTextField(
             value = state.query,
             onValueChange = vm::setQuery,
             singleLine = true,
             placeholder = { Text(stringResource(R.string.library_search_hint)) },
+            trailingIcon = {
+                if (state.query.isNotEmpty()) {
+                    IconButton(onClick = { vm.setQuery("") }) {
+                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.library_search_clear))
+                    }
+                }
+            },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("artist_search"),
         )
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -206,7 +236,8 @@ private fun ArtistList(state: LibraryUiState, vm: LibraryViewModel, cover: Cover
                 Text(stringResource(if (state.sort == ArtistSort.NAME) R.string.library_sort_name else R.string.library_sort_albums))
             }
         }
-        LazyColumn(Modifier.fillMaxSize()) {
+        state.offlineSince?.let { readAt -> OfflineLine(readAt, vm::load) }
+        LazyColumn(Modifier.fillMaxSize().alpha(if (state.offlineSince != null) OFFLINE_ALPHA else 1f)) {
             items(artists, key = { it.artist }) { artist ->
                 Row(
                     modifier = Modifier.fillMaxWidth().clickable { vm.selectArtist(artist.artist) }.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -232,12 +263,37 @@ private fun ArtistList(state: LibraryUiState, vm: LibraryViewModel, cover: Cover
                         }
                     }
                     Text(
-                        pluralStringResource(R.plurals.library_albums_count, artist.albumCount, artist.albumCount),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline,
+                        artistCounts(artist), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline, maxLines = 1,
                     )
                 }
             }
         }
+    }
+}
+
+/** "4 albums · appears on 1", either part alone when the other is nothing. */
+@Composable
+private fun artistCounts(artist: LibraryArtist): String = listOfNotNull(
+    pluralStringResource(R.plurals.library_albums_count, artist.albumCount, artist.albumCount)
+        .takeIf { artist.albumCount > 0 || artist.appearsOnCount == 0 },
+    stringResource(R.string.library_appears_on_count, artist.appearsOnCount).takeIf { artist.appearsOnCount > 0 },
+).joinToString(" · ")
+
+/** Why the list below is dimmed: how old it is, and another try. */
+@Composable
+private fun OfflineLine(readAt: Long, onRetry: () -> Unit) {
+    val context = LocalContext.current
+    val locale = remember(context) { AppLanguage.locale(context) }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("library_offline"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            stringResource(R.string.library_offline, relativeSyncTime(readAt, System.currentTimeMillis(), locale)),
+            style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onRetry) { Text(stringResource(R.string.library_retry)) }
     }
 }
 
@@ -247,6 +303,7 @@ private fun ArtistList(state: LibraryUiState, vm: LibraryViewModel, cover: Cover
 private fun ArtistPane(state: LibraryUiState, vm: LibraryViewModel, cover: Covers, stage: StageAt) {
     val artist = state.selectedArtist ?: return
     when {
+        state.openAlbum != null -> AlbumDetailsPane(state, vm, cover, stage)
         state.albumsLoading -> Column(Modifier.fillMaxSize()) {
             ArtistHeader(state, artist, LIST_INSET, stage)
             Box(Modifier.fillMaxSize()) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
@@ -277,6 +334,44 @@ private fun ArtistHeader(state: LibraryUiState, artist: String, inset: Dp, stage
             style = MaterialTheme.typography.titleSmall,
             modifier = Modifier.fillMaxWidth().padding(horizontal = inset, vertical = 8.dp),
         )
+    }
+}
+
+/** The albums [artist] is on without being their album artist. A tap opens
+ * the album, whole, and a double-tap stages `Artist||Album`: only their
+ * tracks. The album artist's name opens that artist. */
+@Composable
+private fun AppearsOnSection(state: LibraryUiState, artist: String, vm: LibraryViewModel, cover: Covers, stage: StageAt, inset: Dp) {
+    if (state.appearsOn.isEmpty()) return
+    val label = stringResource(R.string.stage_action)
+    Column(Modifier.fillMaxWidth().padding(top = 16.dp).testTag("appears_on")) {
+        Text(
+            stringResource(R.string.library_also_appears_on), style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(horizontal = inset).semantics { heading() },
+        )
+        Text(
+            stringResource(R.string.library_appears_on_hint, artist), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(horizontal = inset),
+        )
+        state.appearsOn.forEach { on ->
+            val url = cover.url(on.albumArtist, on.album)
+            Row(
+                Modifier.fillMaxWidth()
+                    .openOnTapStageOnDoubleTap(label, { vm.openAppearsOn(on) }) { from -> stage("album", "$artist||${on.album}", url, from) }
+                    .padding(horizontal = inset, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TrobarImage(url = url, contentDescription = null, pairing = cover.pairing, modifier = Modifier.size(ARTIST_ROW_PICTURE_SIZE))
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text(on.album, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        pluralStringResource(R.plurals.library_tracks_count, on.trackCount, on.trackCount),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline,
+                    )
+                }
+                TextButton(onClick = { vm.selectArtist(on.albumArtist) }) { Text(on.albumArtist, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            }
+        }
     }
 }
 
@@ -316,9 +411,13 @@ private fun SimilarArtists(state: LibraryUiState, vm: LibraryViewModel, cover: C
     }
 }
 
+/** The year, and the reissue year when the profile shows those. */
+internal fun albumYear(state: LibraryUiState, album: LibraryAlbum): String =
+    listOfNotNull(album.year?.toString(), album.reissueYear?.takeIf { state.showReissueYear }?.let { "($it)" }).joinToString(" ")
+
 @Composable
 private fun albumSubtitle(state: LibraryUiState, album: LibraryAlbum): String {
-    val year = listOfNotNull(album.year?.toString(), album.reissueYear?.takeIf { state.showReissueYear }?.let { "($it)" }).joinToString(" ")
+    val year = albumYear(state, album)
     val tracks = pluralStringResource(R.plurals.library_tracks_count, album.trackCount, album.trackCount)
     return if (year.isEmpty()) tracks else "$year · $tracks"
 }
@@ -326,20 +425,39 @@ private fun albumSubtitle(state: LibraryUiState, album: LibraryAlbum): String {
 @Composable
 private fun AlbumList(state: LibraryUiState, artist: String, vm: LibraryViewModel, cover: Covers, stage: StageAt) {
     val label = stringResource(R.string.stage_action)
-    LazyColumn(Modifier.fillMaxSize().testTag("album_list")) {
+    val listState = rememberLazyListState()
+    // One row above the albums: the artist header.
+    ScrollToAlbum(state, vm) { index -> listState.scrollToItem(index + 1) }
+    LazyColumn(Modifier.fillMaxSize().testTag("album_list"), state = listState) {
         item { ArtistHeader(state, artist, LIST_INSET, stage) }
         items(state.albums, key = { it.album }) { album ->
             val target = "$artist||${album.album}"
             Column(
                 Modifier.fillMaxWidth()
-                    .stageOnDoubleTap(label) { from -> stage("album", target, cover.url(artist, album.album), from) }
+                    .openOnTapStageOnDoubleTap(label, { vm.openAlbum(album.album) }) { from ->
+                        stage("album", target, cover.url(artist, album.album), from)
+                    }
                     .padding(horizontal = 16.dp, vertical = 10.dp),
             ) {
                 Text(album.album, style = MaterialTheme.typography.bodyLarge)
                 Text(albumSubtitle(state, album), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
             }
         }
+        item { AppearsOnSection(state, artist, vm, cover, stage, LIST_INSET) }
         item { SimilarArtists(state, vm, cover, LIST_INSET) }
+    }
+}
+
+/** Scrolls to the album another tab asked for, once the albums are in; an
+ * album not on this page leaves it at the top. */
+@Composable
+private fun ScrollToAlbum(state: LibraryUiState, vm: LibraryViewModel, scrollTo: suspend (Int) -> Unit) {
+    LaunchedEffect(state.scrollToAlbum, state.albums) {
+        val album = state.scrollToAlbum ?: return@LaunchedEffect
+        if (state.albums.isEmpty()) return@LaunchedEffect
+        val index = state.albums.indexOfFirst { it.album == album }
+        if (index >= 0) scrollTo(index)
+        vm.scrolledToAlbum()
     }
 }
 
@@ -354,11 +472,14 @@ class Covers(
 @Composable
 private fun AlbumGrid(state: LibraryUiState, artist: String, vm: LibraryViewModel, cover: Covers, stage: StageAt) {
     val label = stringResource(R.string.stage_action)
+    val gridState = rememberLazyGridState()
+    ScrollToAlbum(state, vm) { index -> gridState.scrollToItem(index + 1) }
     // As many columns as the width holds, as on Home (coverColumns).
     BoxWithConstraints(Modifier.fillMaxSize()) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(coverColumns(maxWidth - GRID_PADDING * 2, GRID_SPACING)),
             modifier = Modifier.fillMaxSize().testTag("album_grid"),
+            state = gridState,
             contentPadding = PaddingValues(GRID_PADDING),
             horizontalArrangement = Arrangement.spacedBy(GRID_SPACING),
             verticalArrangement = Arrangement.spacedBy(GRID_SPACING),
@@ -367,7 +488,7 @@ private fun AlbumGrid(state: LibraryUiState, artist: String, vm: LibraryViewMode
             items(state.albums, key = { it.album }) { album ->
                 val target = "$artist||${album.album}"
                 val url = cover.url(artist, album.album)
-                Column(Modifier.stageOnDoubleTap(label) { from -> stage("album", target, url, from) }) {
+                Column(Modifier.openOnTapStageOnDoubleTap(label, { vm.openAlbum(album.album) }) { from -> stage("album", target, url, from) }) {
                     TrobarImage(
                         url = url, contentDescription = null,
                         pairing = cover.pairing, modifier = Modifier.fillMaxWidth().aspectRatio(1f),
@@ -379,11 +500,13 @@ private fun AlbumGrid(state: LibraryUiState, artist: String, vm: LibraryViewMode
                     )
                 }
             }
+            item(span = { GridItemSpan(maxLineSpan) }) { AppearsOnSection(state, artist, vm, cover, stage, GRID_INSET) }
             item(span = { GridItemSpan(maxLineSpan) }) { SimilarArtists(state, vm, cover, GRID_INSET) }
         }
     }
 }
 
+private const val OFFLINE_ALPHA = 0.6f
 private val GRID_PADDING = 12.dp
 private val GRID_SPACING = 8.dp
 private const val LIST_WEIGHT = 2f

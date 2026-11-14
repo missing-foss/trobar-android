@@ -1,0 +1,5 @@
+• Créer, renommer, réordonner et supprimer des playlists sur le téléphone ; un menu de tri ; synchroniser une playlist ou un titre.
+• Pages d'album avec leurs titres ; la Bibliothèque regroupe par artiste de l'album.
+• Accueil : un widget Playlists, et toucher un appareil montre ce qui est sélectionné pour lui.
+• Téléchargements via un fichier partiel ; une synchronisation prévient d'emblée si la place manque.
+• Synchronisation par point d'accès pour les appareils sans réseau mobile.

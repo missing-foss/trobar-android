@@ -1,0 +1,17 @@
+Trobar garde votre propre bibliothèque musicale sur votre téléphone, votre tablette ou votre baladeur Android, pour l'écouter hors ligne. C'est le client Android de Trobar, un serveur que vous hébergez chez vous : vos fichiers restent à vous, et rien ne passe par un tiers.
+
+Choisissez des artistes, des albums ou des playlists dans l'application web de Trobar, ou dans l'application elle-même, et elle les copie dans le dossier de votre choix, en qualité d'origine, ou transcodés si votre serveur est configuré ainsi. Votre lecteur habituel les lit depuis ce dossier.
+
+Ce qu'elle fait :
+• Se synchronise seule en arrière-plan, ou à la demande. Si la connexion coupe pendant une synchronisation, un téléchargement reprend là où il s'était arrêté.
+• Vérifie l'espace libre avant de commencer, et prévient d'emblée quand la sélection ne tiendra pas.
+• Affiche la bibliothèque du serveur : artistes, albums et playlists, avec les pochettes, et permet d'ajouter n'importe lequel à ce qui se synchronise sur cet appareil.
+• L'accueil montre les albums ajoutés récemment, les playlists qui ont le plus à synchroniser, et ce qui est sélectionné pour chacun de vos appareils.
+• Les playlists se synchronisent en fichiers de playlist que votre lecteur sait lire.
+• Cinq thèmes de couleurs, et un mode Simple avec moins de commandes.
+• En anglais et en français.
+
+Ce qu'il faut :
+• Un serveur Trobar que vous, ou quelqu'un de confiance, hébergez. On associe le téléphone en scannant un code depuis l'application web.
+
+Trobar est un logiciel libre sous licence GPL-3.0-or-later. Ni publicité, ni compte chez nous, ni pistage.

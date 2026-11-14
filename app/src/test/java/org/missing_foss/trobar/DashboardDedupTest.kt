@@ -2,17 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package org.missing_foss.trobar
 
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.junit.runner.RunWith
 
 /** The browser's cross-widget rule, reimplemented: precedence, hidden
  * widgets excluding nothing, the exclude set built from what is shown,
  * dedupe before the limit, suggestions matched on library names, and the
  * round-robin mix by source. */
-@RunWith(AndroidJUnit4::class)
 class DashboardDedupTest {
     private fun card(artist: String, album: String, source: String? = "recent", libraryArtist: String? = artist, libraryAlbum: String? = album) =
         AlbumCard(artist, album, libraryArtist, libraryAlbum, null, source, null, null, null)
@@ -63,7 +60,10 @@ class DashboardDedupTest {
 
     @Test
     fun theMixRoundRobinsSourcesInOrderOfFirstAppearance() {
-        val list = listOf(card("a", "r1", "recent"), card("b", "r2", "recent"), card("c", "l1", "lastfm"), card("d", "r3", "recent"), card("e", "l2", "lastfm"))
+        val list = listOf(
+            card("a", "r1", "recent"), card("b", "r2", "recent"), card("c", "l1", "lastfm"),
+            card("d", "r3", "recent"), card("e", "l2", "lastfm"),
+        )
         assertEquals(listOf("r1", "l1", "r2", "l2", "r3"), titles(DashboardDedup.mix(list, 10)))
         assertEquals(listOf("r1", "l1", "r2"), titles(DashboardDedup.mix(list, 3)))
         assertEquals(emptyList<String>(), titles(DashboardDedup.mix(emptyList(), 3)))

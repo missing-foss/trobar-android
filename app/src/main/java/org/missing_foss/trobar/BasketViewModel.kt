@@ -21,9 +21,12 @@ import java.io.IOException
 data class BasketSection(val device: AppDevice, val items: List<BasketItem>)
 
 /** What a send did, for the message that follows it. `toThisPhone` is
- * what decides whether a sync of this phone is offered. */
+ * what decides whether a sync of this phone is offered; `basketLeft` says
+ * the basket still holds something after it (another device's section,
+ * items the server skipped) or could not be read back, so the screen
+ * stays for it. */
 data class SendOutcome(val device: AppDevice, val result: FanOutResult, val toThisPhone: Boolean,
-                       val deviceNames: List<String> = listOf(device.name))
+                       val deviceNames: List<String> = listOf(device.name), val basketLeft: Boolean = true)
 
 data class BasketUiState(
     val loading: Boolean = true,
@@ -76,10 +79,16 @@ class BasketViewModel(private val api: AppApiClient, private val shared: AppStat
         viewModelScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) { api.fanOut(listOf(section.device.id)) }
+                shared.selectionsChanged(section.device.id)
+                // The basket is read back first, so the outcome knows whether anything is left.
+                val failure = shared.reloadBasket()
+                val left = failure != null || result.skipped > 0 || shared.state.value.basket?.isNotEmpty() != false
                 _state.update {
-                    it.copy(lastSend = SendOutcome(section.device, result, toThisPhone = section.device.id == it.thisDeviceId))
+                    it.copy(
+                        lastSend = SendOutcome(section.device, result, toThisPhone = section.device.id == it.thisDeviceId, basketLeft = left),
+                        error = failure ?: it.error,
+                    )
                 }
-                shared.reloadBasket()?.let { failure -> _state.update { it.copy(error = failure) } }
             } catch (e: IOException) {
                 _state.update { it.copy(error = e.message) }
             }

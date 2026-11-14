@@ -15,6 +15,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
+        android:supportsRtl="true"
         android:allowBackup="false"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
@@ -25,7 +26,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
         <!-- The launcher entry is one of the Launcher* aliases below, not
              this activity: one alias per brand theme, exactly one enabled
-             (LauncherIcon). -->
+             (LauncherIcon).
+             Icon packs match these aliases by their exact component name.
+             Renaming or removing an alias, or changing applicationId, breaks
+             every icon pack that already lists Trobar. Adding a theme adds an
+             alias, and a sixth line in the README's "Icon packs" section. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

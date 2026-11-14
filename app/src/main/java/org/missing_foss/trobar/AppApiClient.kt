@@ -12,10 +12,23 @@ data class WhoAmI(val userId: Long, val username: String, val isAdmin: Boolean,
 
 /** [albums] is each album title, for the search; null from a server that
  * predates the field, and then only the name is searched. */
-data class LibraryArtist(val artist: String, val trackCount: Int, val albumCount: Int, val albums: List<String>? = null)
+data class LibraryArtist(
+    val artist: String, val trackCount: Int, val albumCount: Int, val albums: List<String>? = null,
+    val appearsOnCount: Int = 0,
+)
 
 /** `year` and `reissueYear` are null when no track of the album carries one. */
 data class LibraryAlbum(val album: String, val year: Int?, val reissueYear: Int?, val trackCount: Int)
+
+/** One disc of an album's tracklist; [number] is null when the album has
+ * only the one, which then takes no heading. */
+data class AlbumDisc(val number: Int?, val tracks: List<AlbumTrack>)
+
+/** An album by [albumArtist] with the artist on it: [trackCount] are theirs. */
+data class AppearsOnAlbum(val album: String, val albumArtist: String, val year: Int?, val trackCount: Int)
+
+/** One track of an album; [id] is what a playlist's append takes. */
+data class AlbumTrack(val id: Long, val trackNo: Int?, val discNo: Int?, val title: String, val artist: String, val duration: Double?)
 
 /** One staged item, as the server enriches it: `title` is resolved for
  * display (null, with `missing` true, when a playlist or track target no
@@ -34,7 +47,8 @@ data class DeviceSyncStatus(val pendingCount: Int, val lastSyncedAt: String?)
  * or every device when they are an admin. */
 data class AppDevice(val id: Long, val name: String, val deviceType: String, val maxSizeBytes: Long?,
                      val ownerUsername: String, val isOwn: Boolean, val isPinned: Boolean,
-                     val lastSeenAt: String?, val syncStatus: DeviceSyncStatus, val icon: String? = null)
+                     val lastSeenAt: String?, val syncStatus: DeviceSyncStatus, val icon: String? = null,
+                     val autofit: DeviceAutofit? = null)
 
 /** Trobar's own share of a device (`usedBytes`) against its limit, and what
  * the device last reported about the whole volume and the sync folder; a
@@ -46,7 +60,14 @@ data class DeviceUsage(val usedBytes: Long, val maxSizeBytes: Long?, val trackCo
                        val freeBytesReportedAt: String?, val foreignBytesReportedAt: String?)
 
 data class Selection(val id: Long, val type: String, val target: String, val createdAt: String,
-                     val createdByUsername: String, val deviceIds: List<Long>)
+                     val createdByUsername: String, val deviceIds: List<Long>, val title: String? = null,
+                     val wholeAlbumTracks: Int? = null, val appearsOn: SelectionAppearsOn? = null)
+
+/** An album selection of one artist's tracks on someone else's album. */
+data class SelectionAppearsOn(val tracks: Int, val of: Int)
+
+/** A device's auto-fit, set in the browser. */
+data class DeviceAutofit(val enabled: Boolean, val tracks: Int)
 
 /** The three things the phone follows from the profile: how albums show
  * (list or cover grid), whether reissue years show, and the devices last
@@ -60,6 +81,37 @@ const val APP_API_MIN = 1
 
 /** The level that brought the playlist routes; a level-1 server has none. */
 const val APP_API_PLAYLISTS = 2
+
+/** The level that brought removing a selection from a device. */
+const val APP_API_SELECTIONS = 4
+
+/** The level that brought making playlists from the phone. */
+const val APP_API_PLAYLIST_WRITES = 3
+
+/** The level that brought an album's tracks. */
+const val APP_API_ALBUM_TRACKS = 5
+
+/** The level that brought the library by album artist. Below it the Library
+ * shows what it always did, by track artist. */
+const val APP_API_ALBUM_ARTISTS = 6
+
+/** The level from which Recently added, Recently released and Suggestions
+ * leave out the albums already selected for the phone asking. Below it they
+ * include them, and a change of selections gives no reason to read them again. */
+const val APP_API_HOME_LEAVES_OUT_THIS_PHONE = 7
+
+private fun parseAlbums(json: String): List<LibraryAlbum> {
+    val arr = JSONArray(json)
+    return List(arr.length()) { i ->
+        val o = arr.getJSONObject(i)
+        LibraryAlbum(
+            album = o.optString("album", ""),
+            year = if (o.isNull("year")) null else o.optInt("year"),
+            reissueYear = if (o.isNull("reissue_year")) null else o.optInt("reissue_year"),
+            trackCount = o.optInt("track_count", 0),
+        )
+    }
+}
 
 /** Talks to the App API ("/api/app" routes): the same device token as the
  * sync client, acting as the device's owner, over the app's one HTTP
@@ -95,16 +147,47 @@ class AppApiClient(context: Context, private val serverUrl: String, private val 
         }
     }
 
-    /** One artist's albums, newest first as the server orders them. */
-    fun libraryAlbums(artist: String): List<LibraryAlbum> {
-        val arr = JSONArray(http.get(http.url("library", "albums", query = mapOf("artist" to artist)), "library/albums"))
+    /** The library by album artist, level 6: a compilation once, and an
+     * artist only on others' albums with no album count. */
+    fun albumArtists(): List<LibraryArtist> {
+        val arr = JSONArray(http.get(http.url("library", "album-artists"), "library/album-artists"))
         return List(arr.length()) { i ->
             val o = arr.getJSONObject(i)
-            LibraryAlbum(
-                album = o.optString("album", ""),
-                year = if (o.isNull("year")) null else o.optInt("year"),
-                reissueYear = if (o.isNull("reissue_year")) null else o.optInt("reissue_year"),
-                trackCount = o.optInt("track_count", 0),
+            val titles = o.optJSONArray("albums")
+            LibraryArtist(
+                o.optString("artist", ""), o.optInt("track_count", 0), o.optInt("album_count", 0),
+                titles?.let { a -> List(a.length()) { a.optString(it, "") } }, o.optInt("appears_on_count", 0),
+            )
+        }
+    }
+
+    /** One artist's albums, newest first as the server orders them. */
+    fun libraryAlbums(artist: String): List<LibraryAlbum> =
+        parseAlbums(http.get(http.url("library", "albums", query = mapOf("artist" to artist)), "library/albums"))
+
+    /** The albums [artist] is the album artist of, level 6. */
+    fun albumArtistAlbums(artist: String): List<LibraryAlbum> =
+        parseAlbums(http.get(http.url("library", "album-artist-albums", query = mapOf("artist" to artist)), "library/album-artist-albums"))
+
+    /** Albums by others with [artist] on them, level 6. */
+    fun appearsOn(artist: String): List<AppearsOnAlbum> {
+        val arr = JSONArray(http.get(http.url("library", "appears-on", query = mapOf("artist" to artist)), "library/appears-on"))
+        return List(arr.length()) { i ->
+            val o = arr.getJSONObject(i)
+            AppearsOnAlbum(o.optString("album", ""), o.optString("album_artist", ""), o.intOrNull("year"), o.optInt("track_count", 0))
+        }
+    }
+
+    /** An album's tracks in disc and track order: what selecting it syncs. */
+    fun albumTracks(artist: String, album: String): List<AlbumTrack> {
+        val query = mapOf("artist" to artist, "album" to album)
+        val arr = JSONArray(http.get(http.url("library", "album-tracks", query = query), "library/album-tracks"))
+        return List(arr.length()) { i ->
+            val o = arr.getJSONObject(i)
+            AlbumTrack(
+                id = o.getLong("id"), trackNo = o.intOrNull("track_no"), discNo = o.intOrNull("disc_no"),
+                title = o.optString("title", ""), artist = o.optString("artist", ""),
+                duration = if (o.isNull("duration")) null else o.optDouble("duration"),
             )
         }
     }
@@ -191,9 +274,29 @@ class AppApiClient(context: Context, private val serverUrl: String, private val 
                 createdAt = o.optString("created_at", ""),
                 createdByUsername = o.optString("created_by_username", ""),
                 deviceIds = ids(o.opt("device_ids")),
+                title = o.stringOrNull("title"),
+                wholeAlbumTracks = o.intOrNull("album_tracks"),
+                appearsOn = o.optJSONObject("appears_on")?.let { SelectionAppearsOn(it.optInt("tracks"), it.optInt("of")) },
             )
         }
     }
+
+    /** What removing this selection would delete from the device at its next sync. */
+    fun removalCount(deviceId: Long, type: String, target: String): Int {
+        val body = selectionBody(deviceId, type, target)
+        val o = JSONObject(http.send("POST", http.url("selections", "removal-count"), body, "selections/removal-count"))
+        return o.optInt("tracks", 0)
+    }
+
+    /** Takes the owner's selection off this device, leaving any others it
+     * covers. An IOException carries the server's own message when someone
+     * else's selection keeps it there (409). */
+    fun removeSelection(deviceId: Long, type: String, target: String) {
+        http.send("POST", http.url("selections", "remove"), selectionBody(deviceId, type, target), "selections/remove")
+    }
+
+    private fun selectionBody(deviceId: Long, type: String, target: String) =
+        JSONObject().put("device_id", deviceId).put("type", type).put("target", target)
 
     fun devices(): List<AppDevice> {
         val arr = JSONArray(http.get(http.url("devices"), "devices"))
@@ -211,6 +314,7 @@ class AppApiClient(context: Context, private val serverUrl: String, private val 
                 lastSeenAt = o.stringOrNull("last_seen_at"),
                 syncStatus = DeviceSyncStatus(status?.optInt("pending_count", 0) ?: 0, status?.stringOrNull("last_synced_at")),
                 icon = o.stringOrNull("icon"),
+                autofit = o.optJSONObject("autofit")?.let { DeviceAutofit(it.optBoolean("enabled", false), it.optInt("tracks", 0)) },
             )
         }
     }

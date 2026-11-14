@@ -52,7 +52,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 
 /** The basket: what is staged, one section per destination device, and
  * the per-device Send that turns a section into selections. Deliberately
@@ -61,7 +62,13 @@ import kotlinx.coroutines.flow.first
  * The part the browser cannot do: after a send whose target was this
  * phone, start the sync, and say when the sync setting would hold it back
  * rather than let it wait silently. [onSyncNow] starts the sync where the
- * user is; [onShowSync] shows it. */
+ * user is; [onShowSync] shows it.
+ *
+ * A send that leaves the basket empty, with nothing skipped and the sync not
+ * held back, hands its message to [onSentAll] instead of showing it here:
+ * the shell goes back to the screen the basket was opened from and says it
+ * there, with Show sync when [offerShowSync]. Anything else stays, so an
+ * error, a held-back sync or what is left to send is still in view. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BasketScreen(
@@ -70,6 +77,7 @@ fun BasketScreen(
     onSyncNow: () -> Unit,
     onShowSync: () -> Unit,
     shared: AppState,
+    onSentAll: (message: String, offerShowSync: Boolean) -> Unit = { _, _ -> },
     vm: BasketViewModel = viewModel(factory = BasketViewModel.factory(LocalContext.current, pairing, shared)),
 ) {
     val context = LocalContext.current
@@ -85,7 +93,7 @@ fun BasketScreen(
         }
     }
 
-    state.lastSend?.let { sent -> SendOutcomeEffect(sent, snackbar, onSyncNow, onShowSync, vm::consumeSend) }
+    state.lastSend?.let { sent -> SendOutcomeEffect(sent, snackbar, onSyncNow, onShowSync, vm::consumeSend, onSentAll) }
 
     Scaffold(
         topBar = { BasketTopBar(state.itemCount, onBack, onClear = { confirmClear = true }) },
@@ -152,26 +160,43 @@ internal fun SendOutcomeEffect(
     onSyncNow: () -> Unit,
     onShowSync: () -> Unit,
     onConsumed: () -> Unit,
+    onSentAll: (message: String, offerShowSync: Boolean) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
+    val syncBlockedBy = LocalManualSync.current.blockedBy
     LaunchedEffect(sent) {
         val devices = sent.deviceNames.joinToString(", ")
         var text = context.resources.getQuantityString(R.plurals.basket_sent, sent.result.count, sent.result.count, devices)
         if (sent.result.skipped > 0) {
             text += " " + context.resources.getQuantityString(R.plurals.basket_sent_skipped, sent.result.skipped, sent.result.skipped)
         }
+        // The hand-back navigates, so on the main thread: reading the setting
+        // can resume the effect elsewhere (measured under the test harness).
+        suspend fun handBack(message: String, offerShowSync: Boolean) = withContext(Dispatchers.Main.immediate) {
+            onConsumed()
+            onSentAll(message, offerShowSync)
+        }
+        // Everything sent and nothing held back: the empty basket has nothing
+        // left to show, so the message goes with the user to where they were.
+        val leave = !sent.basketLeft
         if (!sent.toThisPhone) {
+            if (leave) {
+                handBack(text, false)
+                return@LaunchedEffect
+            }
             snackbar.showSnackbar(text)
         } else {
-            val blocked = SyncConditions.blockingReason(context, Prefs.networkMode(context).first())
+            val blocked = syncBlockedBy(context)
             if (blocked != null) {
                 snackbar.showSnackbar(text + " " + context.getString(blocked))
             } else {
                 onSyncNow()
-                val choice = snackbar.showSnackbar(
-                    text + " " + context.getString(R.string.basket_sync_started),
-                    actionLabel = context.getString(R.string.basket_show_sync),
-                )
+                val started = text + " " + context.getString(R.string.basket_sync_started)
+                if (leave) {
+                    handBack(started, true)
+                    return@LaunchedEffect
+                }
+                val choice = snackbar.showSnackbar(started, actionLabel = context.getString(R.string.basket_show_sync))
                 if (choice == SnackbarResult.ActionPerformed) onShowSync()
             }
         }

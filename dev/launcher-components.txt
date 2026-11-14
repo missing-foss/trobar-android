@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 missing-foss
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The app's launcher components, as icon packs match them:
+# applicationId/fully.qualified.Class. dev/guards/check-android-launcher.py
+# fails when the manifest's set differs from this list. Changing a launcher
+# alias, the launcher activity or the applicationId means changing this file
+# in the same change; that is the acknowledgement.
+#
+# One alias per brand theme, disabled ones included: a pack maps them all.
+org.missing_foss.trobar/org.missing_foss.trobar.LauncherContraste
+org.missing_foss.trobar/org.missing_foss.trobar.LauncherGarriga
+org.missing_foss.trobar/org.missing_foss.trobar.LauncherNuech
+org.missing_foss.trobar/org.missing_foss.trobar.LauncherPeira
+org.missing_foss.trobar/org.missing_foss.trobar.LauncherTroubadour

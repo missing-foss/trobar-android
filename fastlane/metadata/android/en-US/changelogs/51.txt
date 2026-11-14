@@ -1,0 +1,5 @@
+• Make, rename, reorder and delete playlists on the phone; a sort menu; sync a whole playlist or one track.
+• Album pages with their tracklist; the Library groups by album artist.
+• Home: a Playlists widget, and tapping a device shows what's selected for it.
+• Downloads go to a part file; a sync says up front when they won't fit.
+• Hotspot sync for devices without a mobile radio.

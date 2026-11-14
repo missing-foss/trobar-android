@@ -7,6 +7,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 # Trobar for Android
 
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/missing-foss/trobar-android/badge)](https://securityscorecards.dev/viewer/?uri=github.com/missing-foss/trobar-android)
+[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/missingfoss)
 
 The Android client of [Trobar](https://github.com/missing-foss/trobar-server)
 — self-hosted music library sync. Pick artists, albums, or playlists in the
@@ -107,13 +108,41 @@ the server. Full walkthrough:
 [the Android client guide](https://missing-foss.github.io/trobar-server/clients/android/)
 in the Trobar documentation.
 
+## Icon packs
+
+The launcher entry is one of five aliases, one per brand theme, and exactly one is enabled at a time. An icon pack has to list all five, or it loses Trobar's icon as soon as someone picks another theme. In an `appfilter.xml`, all five point at the same drawable:
+
+```xml
+<item component="ComponentInfo{org.missing_foss.trobar/org.missing_foss.trobar.LauncherTroubadour}" drawable="trobar"/>
+<item component="ComponentInfo{org.missing_foss.trobar/org.missing_foss.trobar.LauncherNuech}" drawable="trobar"/>
+<item component="ComponentInfo{org.missing_foss.trobar/org.missing_foss.trobar.LauncherGarriga}" drawable="trobar"/>
+<item component="ComponentInfo{org.missing_foss.trobar/org.missing_foss.trobar.LauncherPeira}" drawable="trobar"/>
+<item component="ComponentInfo{org.missing_foss.trobar/org.missing_foss.trobar.LauncherContraste}" drawable="trobar"/>
+```
+
+Two drawings of the logo for pack makers:
+
+- [brand/trobar-mark-mono.svg](brand/trobar-mark-mono.svg): the plain logo, one colour, on a 200 grid.
+- [docs/icon-pack/arcticons.svg](docs/icon-pack/arcticons.svg): a line icon drawn to [Arcticons](https://github.com/Arcticons-Team/Arcticons)' rules (48 px canvas, 1 px white lines with round caps and joins, 1.5 px dots). It is offered under [CC BY-SA 4.0](LICENSES/CC-BY-SA-4.0.txt), the licence Arcticons uses.
+
+The adaptive icon also has its own monochrome layer, so launchers that theme icons get a clean single-colour Trobar without any pack.
+
 ## Build
 
 Standard Gradle project: `./gradlew assembleDebug`. Release builds are
 signed with the maintainer's key; to sign your own, set the
 `TROBAR_KEYSTORE*` environment variables (see the server repository's
 `docs/troubleshooting.md`) — and keep using the same keystore forever,
-Android refuses updates across a signature change.
+Android refuses updates across a signature change. Without them,
+`./gradlew assembleRelease` builds an unsigned
+`app-release-unsigned.apk`, which is what an F-Droid build needs; the
+build prints a warning saying so.
+
+## Support
+
+Trobar for Android is free software, like the rest of Trobar. If it keeps your music on your phone, you can [support Trobar on Ko-fi](https://ko-fi.com/missingfoss).
+
+Support pays for test devices, infrastructure and Claude. Mostly, it buys a good coffee and keeps the motivation going for the next projects.
 
 ## License
 

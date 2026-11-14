@@ -22,12 +22,16 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="enroll_title">Enroll this device</string>
     <string name="enroll_subtitle">Scan the QR code in Trobar or\nenter the server URL and code below.</string>
     <string name="enroll_or_manual">or enter it manually</string>
+    <string name="enroll_paste">Paste</string>
     <string name="enroll_code_label">Enrollment code</string>
     <string name="enroll_continue">Continue</string>
     <string name="device_name_label">Device name</string>
     <string name="transcode_label">Audio format</string>
     <string name="transcode_originals">Originals (no transcoding)</string>
     <string name="transcode_mp3_320">MP3 320 kbit/s</string>
+    <string name="transcode_mp3_256">MP3 256 kbit/s</string>
+    <string name="transcode_mp3_192">MP3 192 kbit/s</string>
+    <string name="transcode_mp3_128">MP3 128 kbit/s</string>
     <string name="enroll_code_expiry_note">The code is single-use and expires 10 minutes after it\'s shown.</string>
     <string name="enroll_button">Enroll</string>
     <string name="enroll_back">Back</string>
@@ -71,6 +75,25 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <item quantity="other">%1$d files found</item>
     </plurals>
     <string name="sync_progress_count">%1$d / %2$d</string>
+    <string name="sync_plan">%1$s, %2$s GB to download, %3$s GB free</string>
+    <string name="sync_plan_no_free">%1$s, %2$s GB to download</string>
+    <plurals name="sync_plan_tracks">
+        <item quantity="one">%1$d track</item>
+        <item quantity="other">%1$d tracks</item>
+    </plurals>
+    <plurals name="sync_failures_more">
+        <item quantity="one">and %1$d more</item>
+        <item quantity="other">and %1$d more</item>
+    </plurals>
+    <string name="section_on_server">On the server</string>
+    <string name="artist_images_label">Artist images</string>
+    <string name="artist_images_off">Off</string>
+    <string name="artist_images_small">Small</string>
+    <string name="artist_images_full">Full</string>
+    <string name="server_owned_hint">Change these on the server, under Devices.</string>
+    <string name="server_owned_hint_two">Change the name and the format on the server, under Devices.</string>
+    <string name="artist_images_description">Whether the sync writes artist.jpg into each artist\'s folder, and at what size. Saved on the server.</string>
+    <string name="artist_images_needs_newer_server">This server can\'t take that from the phone yet. Change it on the server, under Devices.</string>
     <string name="last_sync">Last sync: %1$s</string>
     <string name="never">never</string>
     <string name="last_error">Last error: %1$s</string>
@@ -117,9 +140,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="storage_free_of_total">%1$s GB free of %2$s GB</string>
     <string name="limit_exceeds_free_space">This limit exceeds the actual free space!</string>
 
+    <string name="section_on_device">What\'s on this device</string>
+    <string name="on_device_hint">What is kept here, and how much room it may use.</string>
     <string name="section_sync">SYNC</string>
     <string name="hide_from_gallery_label">Hide from gallery</string>
-    <string name="hide_from_gallery_description">Useful with players like Poweramp</string>
+    <string name="hide_from_gallery_description">Also hides the music from MediaStore players. Useful with players like Poweramp</string>
     <string name="keep_device_content_label">Keep device content</string>
     <string name="keep_device_content_description">The server won\'t delete this device\'s tracks — it survives a server reset. It can still add new content you select.</string>
     <string name="missing_files_label">Locally deleted files</string>
@@ -138,9 +163,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="auto_sync_via_label">Auto-sync</string>
     <string name="network_wifi">Wi-Fi only</string>
     <string name="network_wifi_and_mobile">Wi-Fi + mobile data</string>
+    <string name="network_unmetered_only">Unmetered networks only</string>
+    <string name="network_any_hotspot">Any network, phone hotspots too</string>
     <string name="network_roaming">Wi-Fi + mobile + roaming</string>
     <string name="charging_idle_label">Only while charging and idle</string>
-    <string name="charging_idle_description">Waits for the automatic sync until the device is on the charger and not in use. Off by default — turning this on can push a sync later than the usual 6-hour interval. Manual "sync now" always ignores this.</string>
+    <string name="charging_idle_description">Waits for the automatic sync until the device is on the charger and not in use. Off by default. Manual "sync now" always ignores this.</string>
 
     <string name="section_appearance">APPEARANCE</string>
     <string name="dynamic_color_label">Dynamic colors</string>
@@ -169,10 +196,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="sync_folder_not_found">Sync folder not found — choose it again.</string>
     <string name="cannot_reach_server">Could not reach the server: %1$s</string>
     <string name="file_creation_failed">could not create file</string>
+    <string name="file_rename_failed">could not move the downloaded file into place</string>
     <string name="empty_response">empty response</string>
     <string name="write_stream_unavailable">write stream unavailable</string>
     <string name="download_failed">download failed</string>
     <string name="folder_creation_failed">could not create folder \'%1$s\'</string>
+    <string name="sync_not_enough_space">Not enough space in the sync folder: these downloads need at least %1$s GB, and %2$s GB is free, of which %3$s GB stays free so the device isn\'t left full. Nothing was downloaded; free some space, or lower what is selected for this device.</string>
+    <string name="sync_folder_full">The sync folder\'s storage filled up during the sync. What fit is there; free some space, or lower what is selected for this device.</string>
     <string name="track_error">%1$s: %2$s</string>
     <string name="device_playlists_unreadable">a playlist file or folder in the sync folder couldn\'t be read, so none were sent this sync</string>
 
@@ -189,7 +219,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="update_available">Update available: %1$s — see Releases.</string>
     <string name="update_up_to_date">You are running the latest release (%1$s).</string>
     <string name="update_check_failed">Could not reach GitHub (%1$s) — try again later.</string>
-    <string name="donate_button">Donate</string>
+    <string name="support_button">Support on Ko-fi</string>
+    <string name="support_note">Support pays for test devices, infrastructure and Claude. Mostly, it buys a good coffee and keeps the motivation going for the next projects.</string>
+    <string name="thanks_card_thank">Thank</string>
+    <string name="thanks_card_you">you</string>
+    <string name="thanks_card_synced">Trobar has synced %1$d times for you.</string>
+    <string name="thanks_card_coffee">If it\'s useful, a coffee helps.</string>
+    <string name="thanks_card_dismiss">Dismiss</string>
     <string name="about_links_section">Links</string>
     <string name="about_documentation">Docs</string>
     <string name="about_source_code">Source code</string>
@@ -210,6 +246,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="tictactoe_bard_win">The bard\'s melody prevails.</string>
     <string name="tictactoe_draw">A well-matched duet — call it a draw.</string>
     <string name="tictactoe_play_again">Play again</string>
+    <string name="tictactoe_winning_cell">In the winning line</string>
 
     <!-- The navigation shell: three tabs, the basket destination, and the
          placeholder the not-yet-built destinations show. -->
@@ -225,6 +262,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="playlists_empty">No playlists yet. Refresh to read them from your music services.</string>
     <string name="playlists_pick_one">Pick a playlist to see its tracks.</string>
     <string name="playlists_shared_by">shared by %1$s</string>
+    <string name="playlists_public_link">Added by public link</string>
     <string name="playlists_availability">%1$d/%2$d tracks available locally (%3$d%%)</string>
     <string name="playlists_unresolved">%1$d not matched locally</string>
     <string name="playlists_unknown_source">Unknown source</string>
@@ -236,11 +274,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="subs_title">Playlist subscriptions</string>
     <string name="subs_add_label">Add a public playlist by link</string>
     <string name="subs_add">Add</string>
-    <string name="subs_about">Public YouTube Music playlists only — no account and no sign-in. Trobar reads the playlist and matches its tracks against your own library.</string>
-    <string name="subs_privacy">Nothing is sent to YouTube and nothing is downloaded from it.</string>
+    <string name="subs_about">Public YouTube Music, Spotify and Tidal playlists only — no account and no sign-in. Trobar reads the playlist and matches its tracks against your own library.</string>
+    <string name="subs_privacy">Nothing is sent to either service and nothing is downloaded from it.</string>
     <string name="subs_add_failed">Couldn\'t add that playlist.</string>
     <string name="subs_unavailable">Unavailable — deleted, made private, or the link is wrong.</string>
     <string name="subs_fetch_failed">Couldn\'t reach YouTube Music. Nothing already imported was changed.</string>
+    <string name="subs_fetch_failed_spotify">Couldn\'t read this playlist from Spotify. Nothing already imported was changed.</string>
+    <string name="subs_fetch_failed_tidal">Couldn\'t read this playlist from Tidal. Nothing already imported was changed.</string>
     <string name="subs_no_matches">Fetched, but none of its tracks are in your library.</string>
     <string name="subs_match_count">%1$d of %2$d tracks in your library</string>
     <string name="subs_refresh">Refresh</string>
@@ -320,8 +360,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <item quantity="other">%1$d items could not be sent and stay in the basket.</item>
     </plurals>
     <string name="sync_blocked_offline">The sync will start once the phone is online.</string>
-    <string name="sync_blocked_needs_unmetered">The sync will start once the phone is on an unmetered connection, usually Wi-Fi (your Sync via setting).</string>
-    <string name="sync_blocked_roaming">The sync will start once the phone is no longer roaming (your Sync via setting).</string>
+    <string name="sync_blocked_needs_unmetered">The sync will start once the phone is on an unmetered connection, usually Wi-Fi (your Auto-sync setting).</string>
+    <string name="sync_blocked_roaming">The sync will start once the phone is no longer roaming (your Auto-sync setting).</string>
     <string name="library_search_hint">Search artists and albums</string>
     <plurals name="library_artists_count">
         <item quantity="one">%1$d artist</item>
@@ -337,10 +377,76 @@ SPDX-License-Identifier: GPL-3.0-or-later
     </plurals>
     <string name="library_sort_name">Name</string>
     <string name="library_sort_albums">Albums</string>
+    <string name="library_offline">Offline · last updated %1$s</string>
+    <string name="library_retry">Retry</string>
+    <string name="library_search_clear">Clear the search</string>
+    <string name="widget_months_fewer">One month fewer</string>
+    <string name="widget_months_more">One month more</string>
+    <string name="playlist_new">New playlist</string>
+    <string name="playlist_new_hint">Name</string>
+    <string name="playlist_rename">Rename</string>
+    <string name="playlist_delete">Delete</string>
+    <string name="playlist_delete_title">Delete “%1$s”?</string>
+    <string name="playlist_delete_text">It is removed from every device that has it selected, and any mirror of it is deleted too.</string>
+    <string name="playlist_empty">Nothing on this playlist yet. In the Library, open an album and tap a track to add it.</string>
+    <string name="playlist_track_removed">Removed “%1$s”</string>
+    <string name="playlist_remove_track">Remove %1$s from the playlist</string>
+    <string name="playlist_move_up">Move %1$s up</string>
+    <string name="playlist_move_down">Move %1$s down</string>
+    <string name="playlist_changed_elsewhere">This playlist changed elsewhere, so nothing was saved. Here it is as it stands.</string>
+    <string name="album_add_to_playlist">Add to playlist…</string>
+    <string name="library_also_appears_on">Also appears on</string>
+    <string name="library_appears_on_hint">Albums by other artists with %1$s on them. Selecting one syncs only %1$s\'s tracks on it.</string>
+    <string name="library_appears_on_count">appears on %1$d</string>
+    <string name="album_only_theirs">Add to basket adds only %1$s\'s tracks: %2$d of %3$d.</string>
+    <string name="selection_artist_on_album">%1$s on %2$s</string>
+    <plurals name="selection_tracks_of">
+        <item quantity="one">%1$d of %2$d tracks</item>
+        <item quantity="other">%1$d of %2$d tracks</item>
+    </plurals>
+    <plurals name="selection_whole_album">
+        <item quantity="one">whole album, %1$d track</item>
+        <item quantity="other">whole album, %1$d tracks</item>
+    </plurals>
     <string name="library_pick_an_artist">Pick an artist to see its albums.</string>
     <string name="library_sync_entire_artist">Sync entire artist</string>
     <string name="library_artist_in_basket">In the basket</string>
+    <string name="album_add_to_basket">Add to basket</string>
+    <string name="album_in_basket">In the basket</string>
+    <string name="album_disc">Disc %1$d</string>
+    <string name="album_update_server">Update the server to see this album\'s tracks.</string>
+    <string name="album_add_track_to">Add “%1$s” to</string>
+    <string name="album_new_playlist">New playlist…</string>
+    <string name="album_track_added">Added to “%1$s”</string>
+    <string name="selections_title">Selected for %1$s</string>
+    <string name="selections_artists">Artists</string>
+    <string name="selections_albums">Albums</string>
+    <string name="selections_playlists">Playlists</string>
+    <string name="selections_tracks">Tracks</string>
+    <string name="selections_autofit">Auto-fit</string>
+    <string name="selections_autofit_note">Set in the browser, so it can\'t be removed here.</string>
+    <string name="selections_empty">Nothing is selected for this device. Double-tap an album in the Library or on Home to add it.</string>
+    <string name="selections_remove">Remove</string>
+    <string name="selections_remove_title">Remove “%1$s” from %2$s?</string>
+    <plurals name="selections_remove_body">
+        <item quantity="one">The next sync deletes %1$d track from this device. Tracks another selection also needs stay.</item>
+        <item quantity="other">The next sync deletes %1$d tracks from this device. Tracks another selection also needs stay.</item>
+    </plurals>
+    <string name="widget_playlists">Playlists</string>
+    <string name="widget_playlists_nothing">Nothing to sync to %1$s from your playlists.</string>
+    <string name="widget_playlists_all">All playlists</string>
+    <string name="widget_playlists_how_many">How many</string>
+    <string name="widget_playlists_fewer">Show fewer playlists</string>
+    <string name="widget_playlists_more">Show more playlists</string>
+    <plurals name="widget_playlists_to_sync">
+        <item quantity="one">%1$d to sync to %2$s</item>
+        <item quantity="other">%1$d to sync to %2$s</item>
+    </plurals>
     <string name="stage_action">Add to the basket</string>
+    <string name="stage_action_for">Add to the basket for %1$s</string>
+    <string name="playlists_sync_entire">Sync entire playlist</string>
+    <string name="playlists_open_artist">Open artist</string>
+    <string name="playlists_open_album">Open album</string>
     <string name="stage_already_staged">Already in the basket for %1$s</string>
     <string name="stage_no_destination">No device to add to yet</string>
     <string name="library_similar">Similar artists in your library</string>
@@ -379,6 +485,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <string name="widget_nothing_recently_added">Nothing recently added.</string>
     <string name="widget_nothing_recently_released">Nothing recently released.</string>
     <string name="widget_no_suggestions">No suggestions yet.</string>
+    <!-- From App API level 7 the server leaves out what is selected for this phone, so an empty grid may only mean that. -->
+    <string name="widget_nothing_recently_added_not_here">Nothing recently added that isn\'t already on %1$s.</string>
+    <string name="widget_nothing_recently_released_not_here">Nothing recently released that isn\'t already on %1$s.</string>
+    <!-- What the three texts above name when this phone's enrolled name isn't known. -->
+    <string name="widget_this_device">this device</string>
+    <string name="widget_no_suggestions_not_here">No suggestions that aren\'t already on %1$s.</string>
     <plurals name="widget_hours_of_music">
         <item quantity="one">%1$d hour of music</item>
         <item quantity="other">%1$d hours of music</item>
@@ -412,4 +524,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <item quantity="other">%1$d active delegations</item>
     </plurals>
     <string name="widget_admin_manage_in_browser">Managing users and delegations is done in the browser.</string>
+    <string name="sync_notification_label">Sync progress notification</string>
+    <string name="sync_notification_allowed">Allowed</string>
+    <string name="sync_notification_off">Off</string>
+    <string name="sync_notification_allowed_description">Shows how far a sync has got while it runs.</string>
+    <string name="sync_notification_off_description">Syncs still run, just without a progress notification. Tap to allow it in Android settings.</string>
+    <string name="playlists_sort">Sort</string>
+    <string name="playlists_sort_availability">Availability</string>
+    <string name="playlists_sort_most_tracks">Most tracks</string>
+    <string name="playlists_sort_newest">Newest in Trobar</string>
+    <string name="playlists_sort_name">Name (A–Z)</string>
 </resources>

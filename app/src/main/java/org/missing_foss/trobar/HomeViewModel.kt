@@ -14,6 +14,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -38,6 +39,8 @@ data class HomeUiState(
     val thisDeviceId: Long? = null,
     val basket: List<BasketItem> = emptyList(),
     val destination: AppDevice? = null,
+    /** The server's App API level as of the last load; 0 until read. */
+    val appApiLevel: Int = 0,
     /** Whether each listening-history widget's feed says a history is set
      * up, as far as it has been read; a widget missing here is not known. */
     val historyConfigured: Map<String, Boolean> = emptyMap(),
@@ -94,11 +97,17 @@ class HomeViewModel(
     private val app: AppApiClient,
     private val widgets: Map<String, Widget>,
     private val shared: AppState,
+    /** The server's App API level, as last probed; 0 when unknown. */
+    private val appApiLevel: suspend () -> Int = { 0 },
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state
     private val stager = BasketStager(app, shared) { failure -> _state.update { it.copy(error = failure) } }
-    private val clients = WidgetClients(dashboard, app)
+    private val clients = WidgetClients(dashboard, app, destination = { shared.state.value.destination })
+
+    // The shared counter's value when Home last read its album grids for it.
+    private var selectionsSeen = shared.state.value.thisPhoneSelections
+    private var selectionsChangedWhileLoading = false
 
     init {
         // Who this phone is, the basket, the header's device and the
@@ -113,9 +122,27 @@ class HomeViewModel(
                             destination = sh.destination, prefs = sh.widgetPrefs ?: it.prefs)
                 }
                 if (!before.loading) refetchFor(before, _state.value)
+                if (sh.thisPhoneSelections != selectionsSeen) {
+                    selectionsSeen = sh.thisPhoneSelections
+                    // During a load its own read may have left before the change
+                    // reached the server: read again once it ends.
+                    if (before.loading) selectionsChangedWhileLoading = true else refetchAlbumGrids()
+                }
             }
         }
         load(fresh = false)
+    }
+
+    /** This phone's selections changed: from level 7 the server leaves what
+     * is selected for it out of these three grids, so the visible ones are
+     * read again, and an album just sent here goes, or one just removed comes
+     * back, without a pull to refresh. Below 7 nothing would change. */
+    private fun refetchAlbumGrids() {
+        viewModelScope.launch {
+            if (appApiLevel() < APP_API_HOME_LEAVES_OUT_THIS_PHONE) return@launch
+            val grids = _state.value.orderedVisibleIds.filter { it in ALBUM_GRIDS }
+            fetch(grids)
+        }
     }
 
     /** A preferences change reaches the cards, wherever it was made -- here
@@ -127,7 +154,11 @@ class HomeViewModel(
         val stale = shown.filter { id ->
             id !in before.orderedVisibleIds ||
                 before.prefs.settings.coverLimitOf(id) != after.prefs.settings.coverLimitOf(id) ||
-                before.prefs.settings.months[id] != after.prefs.settings.months[id]
+                before.prefs.settings.months[id] != after.prefs.settings.months[id] ||
+                (id == WidgetIds.PLAYLISTS && (
+                    before.destination?.id != after.destination?.id ||
+                        before.prefs.settings.playlistsLimit != after.prefs.settings.playlistsLimit
+                    ))
         }
         if (stale.isNotEmpty()) viewModelScope.launch { fetch(stale) }
     }
@@ -149,8 +180,13 @@ class HomeViewModel(
                         Triple(c.await(), p.await(), f.await())
                     }
                 }
-                _state.update { it.copy(loading = false, catalog = catalog, prefs = prefs, error = failure) }
+                val level = appApiLevel()
+                _state.update { it.copy(loading = false, catalog = catalog, prefs = prefs, error = failure, appApiLevel = level) }
                 fetch(_state.value.orderedVisibleIds)
+                if (selectionsChangedWhileLoading) {
+                    selectionsChangedWhileLoading = false
+                    refetchAlbumGrids()
+                }
             } catch (e: IOException) {
                 Log.w(TAG, "dashboard load failed", e)
                 _state.update { it.copy(loading = false, error = e.message) }
@@ -276,6 +312,8 @@ class HomeViewModel(
     }
 
     fun setMonths(id: String, months: Int) = patch(months = mapOf(id to months.coerceIn(WidgetIds.MONTHS_RANGE)))
+    fun setPlaylistsLimit(limit: Int) = patch(playlistsLimit = limit.coerceIn(WidgetIds.PLAYLISTS_RANGE))
+
     /** A cover widget's own count -- or, on a server older than per-widget
      * counts, the one value, which there sets all three. */
     fun setCoverLimit(id: String, limit: Int) =
@@ -287,6 +325,7 @@ class HomeViewModel(
         coverLimit: Int? = null,
         months: Map<String, Int> = emptyMap(),
         coverLimits: Map<String, Int> = emptyMap(),
+        playlistsLimit: Int? = null,
     ) {
         viewModelScope.launch {
             try {
@@ -294,7 +333,7 @@ class HomeViewModel(
                 // even if this screen is left first. The data the change
                 // needs is fetched by the collector above, once, as for a
                 // change made on the preferences screen.
-                shared.patchWidgetPrefs(disabled, order, coverLimit, months, coverLimits)
+                shared.patchWidgetPrefs(disabled, order, coverLimit, months, coverLimits, playlistsLimit)
             } catch (e: IOException) {
                 _state.update { it.copy(error = e.message) }
             }
@@ -307,6 +346,8 @@ class HomeViewModel(
     fun stage(type: String, target: String): StageStart = stager.stage(type, target)
 
     companion object {
+        /** The grids that leave out what is selected for this phone. */
+        private val ALBUM_GRIDS = setOf(WidgetIds.RECENTLY_ADDED, WidgetIds.RECENTLY_RELEASED, WidgetIds.SUGGESTIONS)
         private const val TAG = "HomeDashboard"
 
         fun factory(
@@ -323,6 +364,7 @@ class HomeViewModel(
                         AppApiClient(app, pairing.serverUrl, pairing.token),
                         widgets,
                         shared,
+                        appApiLevel = { Prefs.appApi(app).first() ?: 0 },
                     )
                 }
             }

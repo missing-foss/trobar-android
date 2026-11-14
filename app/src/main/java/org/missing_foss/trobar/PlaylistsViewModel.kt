@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONException
 import java.io.IOException
+import kotlinx.coroutines.flow.first
 
 data class PlaylistsUiState(
     val loading: Boolean = true,
@@ -35,10 +36,24 @@ data class PlaylistsUiState(
     val review: Review? = null,
     val lidarrBusy: Boolean = false,
     val sharingBusy: Boolean = false,
+    /** Whether this server takes playlist writes at all. */
+    val canWrite: Boolean = false,
+    val isAdmin: Boolean = false,
+    /** A write was refused because the playlist changed elsewhere. */
+    val changedElsewhere: Boolean = false,
+    val sort: PlaylistSort = PlaylistSort.AVAILABILITY,
 ) {
+    /** Whether the open playlist can be edited here: made in Trobar, and the
+     * caller's or, for an admin, anyone's. */
+    val canEditOpen: Boolean
+        get() = open?.let { canWrite && it.sourceProvider == "trobar" && (it.isOwn || isAdmin) } == true
+
     /** The playlist open, while the list still has it. */
     val open: AppPlaylist? get() = playlists.firstOrNull { it.id == openId }
 }
+
+/** A removal with its Undo still open. */
+internal class HeldRemoval(val editor: PlaylistEntryEditor, val entry: PlaylistEntry, val index: Int)
 
 /** The unmatched entries of the open playlist, as the browser's review
  * panel has them: loaded, or failed ([failed] says so in the browser's
@@ -48,6 +63,41 @@ data class Review(
     val loading: Boolean = true,
     val failed: Boolean = false,
     val busy: Boolean = false,
+)
+
+/** Where the Playlists tab's order is kept between starts. */
+class SortStore(
+    val load: suspend () -> PlaylistSort? = { null },
+    val save: suspend (PlaylistSort) -> Unit = {},
+) {
+    companion object {
+        /** The phone's preferences. An unknown name, from a later version, reads as none. */
+        fun prefs(context: Context) = SortStore(
+            load = { Prefs.playlistSort(context).first()?.let { name -> PlaylistSort.entries.firstOrNull { it.name == name } } },
+            save = { Prefs.setPlaylistSort(context, it.name) },
+        )
+    }
+}
+
+/** The list's orders, as the browser offers them. Ties go by name. */
+enum class PlaylistSort(val label: Int) {
+    AVAILABILITY(R.string.playlists_sort_availability),
+    MOST_TRACKS(R.string.playlists_sort_most_tracks),
+    NEWEST(R.string.playlists_sort_newest),
+    NAME(R.string.playlists_sort_name),
+}
+
+private val byName: Comparator<AppPlaylist> = Comparator { a, b ->
+    java.text.Collator.getInstance().apply { strength = java.text.Collator.PRIMARY }.compare(a.title, b.title)
+}
+
+internal fun sorted(playlists: List<AppPlaylist>, sort: PlaylistSort = PlaylistSort.AVAILABILITY): List<AppPlaylist> = playlists.sortedWith(
+    when (sort) {
+        PlaylistSort.AVAILABILITY -> compareByDescending<AppPlaylist> { it.availabilityPct() }.then(byName)
+        PlaylistSort.MOST_TRACKS -> compareByDescending<AppPlaylist> { it.trackCount }.then(byName)
+        PlaylistSort.NEWEST -> compareByDescending { it.id }
+        PlaylistSort.NAME -> byName
+    },
 )
 
 /** The share of a playlist's tracks found in the library, in whole
@@ -61,15 +111,63 @@ private const val PERCENT = 100f
  * sync -- started here, and followed while it runs, with the list reread
  * as playlists arrive -- and the stage of a playlist for the header's
  * device. */
-class PlaylistsViewModel(private val api: AppApiPlaylistClient, app: AppApiClient, shared: AppState) : ViewModel() {
+class PlaylistsViewModel(
+    private val api: AppApiPlaylistClient,
+    app: AppApiClient,
+    private val shared: AppState,
+    private val appApiLevel: suspend () -> Int = { 0 },
+    /** The order chosen last time, and where a new choice is kept: the
+     * phone's preferences in the app, nothing in a test that passes none. */
+    private val sortStore: SortStore = SortStore(),
+) : ViewModel() {
     private val _state = MutableStateFlow(PlaylistsUiState())
     val state: StateFlow<PlaylistsUiState> = _state
     private val stager = BasketStager(app, shared) { failure -> _state.update { it.copy(error = failure) } }
     private var follow: Job? = null
+    private var editor: PlaylistEntryEditor? = null
+    private val editorHost = object : EntryEditorHost {
+        override fun show(playlistId: Long, entries: List<PlaylistEntry>) =
+            _state.update { if (it.openId == playlistId) it.copy(entries = entries) else it }
+
+        override fun changedElsewhere(playlistId: Long) =
+            _state.update { if (it.openId == playlistId) it.copy(changedElsewhere = true) else it }
+
+        override fun failed(message: String?) = _state.update { it.copy(error = message) }
+
+        override suspend fun saved() = refreshList()
+    }
+
+    // Before init: load() goes through it.
+    val sorting = Sorting()
 
     init {
+        viewModelScope.launch {
+            val canWrite = appApiLevel() >= APP_API_PLAYLIST_WRITES
+            _state.update { it.copy(canWrite = canWrite) }
+            shared.state.collect { sh -> _state.update { it.copy(isAdmin = sh.isAdmin) } }
+        }
         load()
     }
+
+    /** The list's order: the one chosen last time at the start, and a new
+     * choice applied at once and kept for the next start. */
+    inner class Sorting {
+        init {
+            viewModelScope.launch {
+                sortStore.load()?.let { sort -> _state.update { it.copy(sort = sort, playlists = sorted(it.playlists, sort)) } }
+            }
+        }
+
+        /** A list just read, in the current order: every replacement of the
+         * list goes through here, so none can jump back to another order. */
+        fun order(playlists: List<AppPlaylist>): List<AppPlaylist> = sorted(playlists, _state.value.sort)
+
+        fun by(sort: PlaylistSort) {
+            _state.update { it.copy(sort = sort, playlists = sorted(it.playlists, sort)) }
+            viewModelScope.launch { sortStore.save(sort) }
+        }
+    }
+
 
     /** Reads the list and whether a sync runs; one already running (started
      * from the browser, say) is followed as if started here. */
@@ -84,7 +182,7 @@ class PlaylistsViewModel(private val api: AppApiPlaylistClient, app: AppApiClien
                         p.await() to s.await()
                     }
                 }
-                _state.update { it.copy(loading = false, playlists = sorted(playlists)) }
+                _state.update { it.copy(loading = false, playlists = sorting.order(playlists)) }
                 if (status.running) followSync()
             } catch (e: IOException) {
                 _state.update { it.copy(loading = false, error = e.message) }
@@ -102,7 +200,9 @@ class PlaylistsViewModel(private val api: AppApiPlaylistClient, app: AppApiClien
         viewModelScope.launch {
             try {
                 val playlists = withContext(Dispatchers.IO) { api.playlists() }
-                _state.update { it.copy(playlists = sorted(playlists)) }
+                _state.update { it.copy(playlists = sorting.order(playlists)) }
+                // The Library adds to the open playlist, and any write rewrites its ids.
+                editor?.reread()
             } catch (e: IOException) {
                 _state.update { it.copy(error = e.message) }
             } catch (e: JSONException) {
@@ -137,7 +237,7 @@ class PlaylistsViewModel(private val api: AppApiPlaylistClient, app: AppApiClien
             while (true) {
                 val running = try {
                     val (status, playlists) = withContext(Dispatchers.IO) { api.syncStatus() to api.playlists() }
-                    _state.update { it.copy(playlists = sorted(playlists)) }
+                    _state.update { it.copy(playlists = sorting.order(playlists)) }
                     status.running
                 } catch (e: IOException) {
                     _state.update { it.copy(error = e.message) }
@@ -157,12 +257,24 @@ class PlaylistsViewModel(private val api: AppApiPlaylistClient, app: AppApiClien
         }
     }
 
+    /** The last one left, whose write a read may still have to wait for: going
+     * through the list between two playlists leaves no [editor] to wait on. */
+    private var departing: PlaylistEntryEditor? = null
+
     fun open(id: Long?) {
+        // Leaving sends what the Undo was holding: it can't be lost by moving on.
+        val leaving = editor ?: departing
+        leaving?.send()
+        departing = leaving
+        editor = null
         _state.update { it.copy(openId = id, entries = emptyList(), entriesLoading = id != null, review = null) }
         if (id == null) return
         viewModelScope.launch {
             try {
+                // After any write of the one left, which may be this same playlist.
+                leaving?.idle()
                 val entries = withContext(Dispatchers.IO) { api.entries(id) }
+                if (_state.value.openId == id) editor = PlaylistEntryEditor(id, entries, api, viewModelScope, editorHost)
                 _state.update { if (it.openId == id) it.copy(entries = entries, entriesLoading = false) else it }
             } catch (e: IOException) {
                 _state.update { if (it.openId == id) it.copy(entriesLoading = false, error = e.message) else it }
@@ -172,7 +284,83 @@ class PlaylistsViewModel(private val api: AppApiPlaylistClient, app: AppApiClien
         }
     }
 
-    fun consumeError() = _state.update { it.copy(error = null) }
+    fun consumeError() = _state.update { it.copy(error = null, changedElsewhere = false) }
+
+    /** Makes a playlist and opens it. */
+    fun create(title: String) = attemptWrite {
+        val id = withContext(Dispatchers.IO) { api.create(title) }
+        val playlists = withContext(Dispatchers.IO) { api.playlists() }
+        _state.update { it.copy(playlists = sorting.order(playlists)) }
+        open(id)
+    }
+
+    fun rename(title: String) {
+        val id = _state.value.openId ?: return
+        attemptWrite {
+            withContext(Dispatchers.IO) { api.rename(id, title) }
+            refreshList()
+        }
+    }
+
+    fun delete() {
+        val id = _state.value.openId ?: return
+        val going = editor
+        attemptWrite {
+            // Nothing goes out meanwhile; if the server says no, nothing is lost.
+            going?.pause()
+            going?.idle()
+            try {
+                withContext(Dispatchers.IO) { api.delete(id) }
+            } finally {
+                going?.resume()
+            }
+            if (editor === going) editor = null
+            open(null)
+            refreshList()
+        }
+    }
+
+    private suspend fun refreshList() {
+        val playlists = withContext(Dispatchers.IO) { api.playlists() }
+        _state.update { it.copy(playlists = sorting.order(playlists)) }
+    }
+
+    private fun attemptWrite(write: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                write()
+            } catch (e: IOException) {
+                _state.update { it.copy(error = e.message) }
+            } catch (e: JSONException) {
+                _state.update { it.copy(error = e.message) }
+            }
+        }
+    }
+
+    /** Moves an entry and writes the new order at once, and with it any
+     * removal still held: there is one list on the server. */
+    fun moveEntry(from: Int, to: Int) {
+        editor?.move(from, to)
+    }
+
+    /** Takes [entry] off the list on screen; [commitEdits] sends it, once
+     * its Undo has run out. Answers what the Undo needs. */
+    internal fun removeEntry(entry: PlaylistEntry): HeldRemoval? {
+        val held = editor ?: return null
+        val index = held.indexOf(entry)
+        held.remove(entry)
+        return HeldRemoval(held, entry, index)
+    }
+
+    /** Puts a held removal back, in the playlist it came from and only while
+     * that one is open: it has already gone out otherwise. */
+    internal fun undoRemove(held: HeldRemoval) {
+        if (held.editor === editor) held.editor.restore(held.entry, held.index)
+    }
+
+    fun commitEdits() {
+        editor?.send()
+    }
 
     /** Opens the review of the open playlist's unmatched entries. */
     fun openReview() {
@@ -244,7 +432,7 @@ class PlaylistsViewModel(private val api: AppApiPlaylistClient, app: AppApiClien
             try {
                 withContext(Dispatchers.IO) { api.setShared(p.id, !p.shared) }
                 val playlists = withContext(Dispatchers.IO) { api.playlists() }
-                _state.update { it.copy(playlists = sorted(playlists)) }
+                _state.update { it.copy(playlists = sorting.order(playlists)) }
             } catch (e: IOException) {
                 _state.update { it.copy(error = e.message) }
             } catch (e: JSONException) {
@@ -278,10 +466,17 @@ class PlaylistsViewModel(private val api: AppApiPlaylistClient, app: AppApiClien
      * goes on behind. */
     fun stage(id: Long): StageStart = stager.stage("playlist", id.toString())
 
+    /** Stages one library track for the header's device, the same way. */
+    fun stageTrack(trackId: Long): StageStart = stager.stage("track", trackId.toString())
+
+    /** Whether this target is already staged for the header's device. */
+    fun stagedHere(type: String, target: String): Boolean = shared.state.value.staging.stagedHere(type, target)
+
+    /** Opens an entry's artist page in the Library, at [album] if set. */
+    fun openInLibrary(artist: String, album: String? = null) = shared.openInLibrary(LibraryTarget(artist, album))
+
     /** The browser's order: most available first, ties in the server's
      * order (the sort is stable, as the browser's is). */
-    private fun sorted(playlists: List<AppPlaylist>) = playlists.sortedByDescending { it.availabilityPct() }
-
     companion object {
         /** As often as the browser asks. */
         private const val POLL_MILLIS = 2_000L
@@ -294,6 +489,8 @@ class PlaylistsViewModel(private val api: AppApiPlaylistClient, app: AppApiClien
                     AppApiPlaylistClient(app, pairing.serverUrl, pairing.token),
                     AppApiClient(app, pairing.serverUrl, pairing.token),
                     shared,
+                    appApiLevel = { Prefs.appApi(app).first() ?: 0 },
+                    sortStore = SortStore.prefs(app),
                 )
             }
         }

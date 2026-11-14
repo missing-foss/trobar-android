@@ -80,10 +80,21 @@ class AppApiPlaylistClientTest {
     fun entriesKeepThePlaylistsOrderAndWhetherEachResolved() {
         server.enqueue(answer(200, TRACKS))
         assertEquals(
-            listOf(PlaylistEntry(1, "A", "One", "B", true), PlaylistEntry(2, "C", "Two", null, false)),
+            listOf(
+                PlaylistEntry(1, "A", "One", "B", true, trackId = 9, libraryArtist = "Various", libraryAlbum = "Mix"),
+                PlaylistEntry(2, "C", "Two", null, false),
+            ),
             api.entries(7),
         )
         assertEquals("/api/app/playlists/7/tracks", server.takeRequest().path)
+    }
+
+    @Test
+    fun anEntryFromAServerWithoutLibraryNamesOpensItsOwn() {
+        val e = PlaylistEntry(1, "A", "One", "B", true, trackId = 9)
+        assertEquals("A" to "B", e.openArtist to e.openAlbum)
+        val filed = e.copy(libraryArtist = "Various", libraryAlbum = "Mix")
+        assertEquals("Various" to "Mix", filed.openArtist to filed.openAlbum)
     }
 
     @Test
@@ -177,7 +188,7 @@ class AppApiPlaylistClientTest {
     private companion object {
         const val PLAYLISTS = """[{"can_share": false, "golden_owner_username": null, "id": 2, "inferred_origin_provider": null, "is_own": false, "last_synced_at": "2026-09-20 10:00:00", "lidarr_request_configured": false, "lidarr_request_connected": false, "lidarr_request_enabled": false, "lidarr_request_has_albums": false, "lidarr_request_last_count": 0, "lidarr_request_last_error": null, "lidarr_request_last_error_code": null, "lidarr_request_last_run_at": null, "matched_count": 0, "owner_user_id": null, "owner_username": null, "shared": true, "source_provider": "roon", "title": "Household", "track_count": 0, "unresolved_count": 0}, {"can_share": true, "golden_owner_username": null, "id": 1, "inferred_origin_provider": null, "is_own": true, "last_synced_at": "2026-09-20 10:00:00", "lidarr_request_configured": false, "lidarr_request_connected": false, "lidarr_request_enabled": false, "lidarr_request_has_albums": false, "lidarr_request_last_count": 0, "lidarr_request_last_error": null, "lidarr_request_last_error_code": null, "lidarr_request_last_run_at": null, "matched_count": 1, "owner_user_id": 2, "owner_username": "owner", "shared": false, "source_provider": "roon", "title": "Road Trip", "track_count": 2, "unresolved_count": 1}]"""
         const val PLAYLISTS_AS_ADMIN = """[{"can_share": false, "golden_owner_username": null, "id": 2, "inferred_origin_provider": null, "is_own": false, "last_synced_at": "2026-09-20 10:00:00", "lidarr_request_configured": false, "lidarr_request_connected": false, "lidarr_request_enabled": false, "lidarr_request_has_albums": false, "lidarr_request_last_count": 0, "lidarr_request_last_error": null, "lidarr_request_last_error_code": null, "lidarr_request_last_run_at": null, "matched_count": 0, "owner_user_id": null, "owner_username": null, "shared": true, "source_provider": "roon", "title": "Household", "track_count": 0, "unresolved_count": 0}, {"can_share": true, "golden_owner_username": null, "id": 1, "inferred_origin_provider": null, "is_own": false, "last_synced_at": "2026-09-20 10:00:00", "lidarr_request_configured": false, "lidarr_request_connected": false, "lidarr_request_enabled": false, "lidarr_request_has_albums": false, "lidarr_request_last_count": 0, "lidarr_request_last_error": null, "lidarr_request_last_error_code": null, "lidarr_request_last_run_at": null, "matched_count": 1, "owner_user_id": 2, "owner_username": "owner", "shared": false, "source_provider": "roon", "title": "Road Trip", "track_count": 2, "unresolved_count": 1}]"""
-        const val TRACKS = """[{"album": "B", "artist": "A", "matched": true, "position": 1, "title": "One"}, {"album": null, "artist": "C", "matched": false, "position": 2, "title": "Two"}]"""
+        const val TRACKS = """[{"album": "B", "artist": "A", "library_album": "Mix", "library_artist": "Various", "matched": true, "position": 1, "title": "One", "track_id": 9}, {"album": null, "artist": "C", "matched": false, "position": 2, "title": "Two"}]"""
         const val SYNC_START = """{"status": "started"}"""
         const val SYNC_BUSY = """{"error": "A playlist sync is already running."}"""
         const val SYNC_STATUS = """{"last_result": null, "running": false}"""

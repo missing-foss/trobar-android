@@ -1,0 +1,17 @@
+Trobar keeps your own music library on your phone, tablet or Android-based audio player, for listening offline. It's the Android client of Trobar, a self-hosted server you run at home: your files stay yours, and nothing goes through a third party.
+
+Choose artists, albums or playlists in Trobar's web app, or in the app itself, and the app copies them into a folder of your choice, in their original quality or transcoded if your server is set up that way. Your usual music player plays them from there.
+
+What it does:
+• Syncs on its own in the background, or when you ask. If the connection drops during a sync, a download picks up where it stopped.
+• Checks free space before it starts, and says up front when the selection won't fit.
+• Shows the server's library: artists, albums and playlists, with covers, and lets you add any of them to what syncs to this device.
+• Home shows recently added albums, the playlists with the most left to sync, and what's selected for each of your devices.
+• Playlists sync as playlist files your player can read.
+• Five colour themes, and a Simple mode with fewer controls.
+• English and French.
+
+What it needs:
+• A Trobar server you or someone you trust runs. Pair the phone by scanning a code from the web app.
+
+Trobar is free software under the GPL-3.0-or-later licence. It has no ads, no account with us, and no tracking.

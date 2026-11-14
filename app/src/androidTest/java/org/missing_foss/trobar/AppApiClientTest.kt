@@ -219,7 +219,7 @@ class AppApiClientTest {
         val devices = api.devices()
         assertEquals(
             listOf(
-                AppDevice(1L, "Phone", "phone", 32_000_000_000L, "alice", true, false, "2026-09-01T10:00:00", DeviceSyncStatus(3, null), icon = "clickwheel"),
+                AppDevice(1L, "Phone", "phone", 32_000_000_000L, "alice", true, false, "2026-09-01T10:00:00", DeviceSyncStatus(3, null), autofit = DeviceAutofit(false, 0), icon = "clickwheel"),
                 AppDevice(2L, "Car", "dap", null, "bob", false, true, null, DeviceSyncStatus(0, "2026-08-30T08:00:00")),
             ),
             devices,

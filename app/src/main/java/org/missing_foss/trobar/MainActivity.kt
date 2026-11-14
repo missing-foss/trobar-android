@@ -2,12 +2,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package org.missing_foss.trobar
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -35,6 +40,26 @@ class MainActivity : ComponentActivity() {
     // A link shared from another app, waiting for the paired app to take it.
     // Held here, not in the composition, so it survives the pairing screens.
     private var sharedLink by mutableStateOf<String?>(null)
+
+    // Registered on the Activity, not in the folder picker's composition:
+    // saving the folder replaces that screen while the prompt is still up.
+    // Nothing to do with the answer; Settings reads the current state.
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    /** Asks for the notification permission once, on Android 13 and later,
+     * where the sync's progress notification needs it. A refusal changes
+     * nothing else: the sync runs the same, without the notification. */
+    private fun askForNotificationsOnce() {
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        lifecycleScope.launch {
+            if (!shouldAskForNotifications(Build.VERSION.SDK_INT, granted,
+                    Prefs.notificationPromptDone(this@MainActivity))) return@launch
+            Prefs.setNotificationPromptDone(this@MainActivity)
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     // API 26-32: the in-app language choice is applied here; see AppLanguage.
     override fun attachBaseContext(newBase: Context) {
@@ -138,6 +163,7 @@ class MainActivity : ComponentActivity() {
                     Prefs.setTreeUri(this@MainActivity, uri.toString())
                     SyncWorker.schedulePeriodic(this@MainActivity)
                 }
+                askForNotificationsOnce()
             })
             else -> PairedApp(
                 pairing = (state as Prefs.PairingState.Paired).pairing,
@@ -156,11 +182,11 @@ class MainActivity : ComponentActivity() {
                     )
                     lifecycleScope.launch { Prefs.setTreeUri(this@MainActivity, newUri.toString()) }
                 },
-                onUnpair = { lifecycleScope.launch { Prefs.clearPairing(this@MainActivity) } },
+                onUnpair = { lifecycleScope.launch { SyncWorker.unpair(this@MainActivity) } },
                 // #34: Re-enroll on a persistent 401 — clear the (now-orphaned)
                 // pairing to return to pairing/enrollment; the local library +
                 // folder stay, which the recovery flow (part 3) builds on.
-                onReEnroll = { lifecycleScope.launch { Prefs.clearPairing(this@MainActivity) } },
+                onReEnroll = { lifecycleScope.launch { SyncWorker.unpair(this@MainActivity) } },
                 sharedLink = SharedLinkIn(sharedLink) { sharedLink = null },
             )
         }

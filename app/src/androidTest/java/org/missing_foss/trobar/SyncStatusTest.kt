@@ -9,16 +9,20 @@
 
 package org.missing_foss.trobar
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.work.WorkInfo
@@ -152,7 +156,108 @@ class SyncStatusTest {
         }
     }
 
+    @Test
+    fun theSettingsCardLeavesARunToTheIndicator() {
+        val pairing = Prefs.Pairing(serverUrl = "http://127.0.0.1:9", token = "test-token")
+        val status = SyncStatus(SyncPhase.RUNNING, done = 9, total = 142, plan = SyncPlan(142, 4_200_000_000L, null))
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MaterialTheme {
+                Column {
+                    SyncStatusCard(pairing, status, live = false)
+                    SyncIndicator(status, ConnState.OK, onOpen = {})
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(FRAME_MS)
+        // The run's state, its count and the turning star: once, in the indicator.
+        compose.onAllNodesWithText("Sync in progress", substring = true, useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodesWithText("9 / 142", substring = true, useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodesWithTag(syncMarkTag(MarkState.SYNCING), useUnmergedTree = true).assertCountEquals(1)
+        // What only the card has stays: the plan, and Sync now, held while the run lasts.
+        compose.onNodeWithTag("sync_plan").assertExists()
+        compose.onNodeWithText("Sync now").assertIsNotEnabled()
+    }
+
+    /** Settings' card and the indicator as AppShell lays them out, with the
+     * card's [live] chosen from the connection as SettingsTab chooses it. */
+    private fun settingsWithIndicator(status: SyncStatus, conn: ConnState) {
+        val pairing = Prefs.Pairing(serverUrl = "http://127.0.0.1:9", token = "test-token")
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MaterialTheme {
+                Column {
+                    SyncStatusCard(pairing, status, live = settingsCardIsLive(conn))
+                    SyncIndicator(status, conn, onOpen = {})
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(FRAME_MS)
+    }
+
+    @Test
+    fun withTheServerUnreachableAWaitingSyncStillSaysWhy() {
+        settingsWithIndicator(
+            SyncStatus(SyncPhase.WAITING, waitingReason = R.string.sync_blocked_needs_unmetered), ConnState.UNREACHABLE,
+        )
+        compose.onAllNodesWithText("unmetered connection", substring = true, useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    @Test
+    fun withTheServerUnreachableARunningSyncStillShows() {
+        settingsWithIndicator(SyncStatus(SyncPhase.RUNNING, done = 9, total = 142), ConnState.UNREACHABLE)
+        compose.onAllNodesWithText("Sync in progress", substring = true, useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    @Test
+    fun withTheServerAnsweringARunShowsOnce() {
+        settingsWithIndicator(SyncStatus(SyncPhase.RUNNING, done = 9, total = 142), ConnState.OK)
+        compose.onAllNodesWithText("Sync in progress", substring = true, useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodesWithText("9 / 142", substring = true, useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    /** The real SettingsTab, not a copy of its rule: the tests above call
+     * settingsCardIsLive themselves, so they would still pass if SettingsTab
+     * stopped calling it. The probe is set by hand, so no request is made. */
+    private fun settingsTabWithIndicator(status: SyncStatus, conn: ConnState) {
+        val pairing = Prefs.Pairing(serverUrl = "http://127.0.0.1:9", token = "test-token")
+        val probe = ServerProbe().apply { state = conn }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MaterialTheme {
+                Column {
+                    SettingsTab(
+                        pairing = pairing,
+                        treeUri = "content://test/tree",
+                        probe = probe,
+                        syncStatus = status,
+                        nav = rememberNavController(),
+                        host = HostActions(onServerUrlChanged = {}, onFolderChanged = {}, onUnpair = {}, onReEnroll = {}),
+                    )
+                    SyncIndicator(status, conn, onOpen = {})
+                }
+            }
+        }
+        repeat(SETTLE_FRAMES) { compose.mainClock.advanceTimeBy(FRAME_MS) }
+    }
+
+    @Test
+    fun inSettingsWithTheServerUnreachableARunningSyncShowsOnce() {
+        settingsTabWithIndicator(SyncStatus(SyncPhase.RUNNING, done = 9, total = 142), ConnState.UNREACHABLE)
+        compose.onAllNodesWithText("Can't reach the server", useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodesWithText("Sync in progress", substring = true, useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    @Test
+    fun inSettingsWithTheServerUnreachableAWaitingSyncSaysWhyOnce() {
+        settingsTabWithIndicator(
+            SyncStatus(SyncPhase.WAITING, waitingReason = R.string.sync_blocked_needs_unmetered), ConnState.UNREACHABLE,
+        )
+        compose.onAllNodesWithText("unmetered connection", substring = true, useUnmergedTree = true).assertCountEquals(1)
+    }
+
     private companion object {
+        const val SETTLE_FRAMES = 10
         const val FRAME_MS = 32L
         const val FINISH_GONE_MS = 6_000L
     }

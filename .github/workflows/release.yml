@@ -1,0 +1,135 @@
+# SPDX-FileCopyrightText: 2026 missing-foss
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# WHERE THIS RUNS: the published mirror, under GitHub Actions only. The
+# development environment's CI reads its own workflow directory and takes
+# nothing from `.github/`, so this file never runs there.
+
+# Release: fires on a bare vX.Y.Z tag. Test pre-releases (test-*) and
+# hand-over tags (release-handover-*) don't match `v*` and never reach it.
+#
+# RE-RUNS: dispatch this workflow FROM THE TAG (pick the tag, not a branch,
+# as the ref in the dispatch dialog), so the version check reads the tagged
+# tree.
+#
+# NO BUILD, NO ASSET. The APK is built and signed outside GitHub, with the
+# key no CI ever holds, and a human attaches it to the draft afterwards as
+# trobar-X.Y.Z.apk, the name earlier releases used, which Obtainium's
+# filename match relies on. What this does is prove the tag is honest, run
+# the CI gates on the tagged commit, and open a DRAFT release for a human to
+# finish and publish. Nothing is public until a human publishes it.
+#
+# Modelled on trobar-server's release workflow: the gates job calls ci.yml
+# (workflow_call), so the draft waits for the same build, lint, static
+# analysis and emulator tests a pull request runs.
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The version of record is versionName in app/build.gradle.kts.
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Tag must match versionName
+        # The ref reaches the script through the environment, never
+        # interpolated into its text.
+        env:
+          REF: ${{ github.ref_name }}
+        run: |
+          # A dispatch from a branch named like a version would otherwise pass,
+          # and the draft would then carry a tag GitHub creates on publish, on
+          # the default branch's head rather than on the commit checked here.
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "::error::'$REF' is a $GITHUB_REF_TYPE, not a tag -- dispatch this from the tag"
+            exit 1
+          fi
+          ref="$REF"
+          case "$ref" in
+            v*) ;;
+            *) echo "::error::tag '$ref' does not start with 'v' — releases are tagged vX.Y.Z"; exit 1 ;;
+          esac
+          tag_version="${ref#v}"
+          file_version="$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)"
+          if [ -z "$file_version" ]; then
+            echo "::error::no versionName found in app/build.gradle.kts"
+            exit 1
+          fi
+          echo "tag=$tag_version  versionName=$file_version"
+          if [ "$tag_version" != "$file_version" ]; then
+            echo "::error::tag $ref implies version $tag_version but versionName is $file_version — bump versionName or retag"
+            exit 1
+          fi
+
+  gates:
+    needs: [version-check]
+    uses: ./.github/workflows/ci.yml
+
+  draft-release:
+    needs: [version-check, gates]
+    runs-on: ubuntu-latest
+    # Only this job needs write, and only to create the draft.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Release notes from CHANGELOG.md
+        # The draft's notes are this version's CHANGELOG.md section, written
+        # and reviewed in the version-bump pull request, then the fixed line(s)
+        # below. A missing or empty section stops the job before any draft
+        # exists. Its own step, so it can be run alone to see the body.
+        env:
+          TAG: ${{ github.ref_name }}
+          SUPPORT_LINE: "If Trobar is useful to you, you can support its development on Ko-fi: https://ko-fi.com/missingfoss"
+        run: |
+          version="${TAG#v}"
+          notes="$RUNNER_TEMP/release-notes.md"
+          # The lines after "## [X.Y.Z]" (a date after it optional), up to the
+          # next "## ", without the blank lines at either end.
+          awk -v h="## [$version]" '
+              index($0, h) == 1 && (length($0) == length(h) || substr($0, length(h) + 1, 1) == " ") { inside = 1; next }
+              inside && /^## / { exit }
+              inside { print }' CHANGELOG.md \
+            | sed -e '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > "$notes"
+          # A relative link (docs/..., README.md#...) would resolve against the
+          # release page; point it at the file as it is at this tag.
+          sed -i -E "s#\]\(([^)#:][^):]*)\)#](https://github.com/$GITHUB_REPOSITORY/blob/$TAG/\1)#g" "$notes"
+          if ! grep -q '^- ' "$notes"; then
+            echo "::error::CHANGELOG.md has no '## [$version]' section with an entry -- no draft without release notes"
+            exit 1
+          fi
+          printf '\n%s\n' "$SUPPORT_LINE" >> "$notes"
+          echo "--- release notes for $TAG ---"
+          cat "$notes"
+      - name: Create the draft release, or leave an existing one alone
+        # `gh` in a run: step rather than a third-party release action: the
+        # organisation's Actions policy allows GitHub-owned and
+        # verified-creator actions only.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release $TAG already exists — leaving it alone"
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" --draft \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi
+          cat >> "$GITHUB_STEP_SUMMARY" <<SUMMARY
+          ### $TAG — draft release created
+
+          The tag matches \`versionName\` in \`app/build.gradle.kts\`.
+
+          The CI gates passed on the tagged commit.
+
+          Nothing is published by this workflow, and it uploads nothing. A
+          human attaches the signed APK to the draft as
+          \`trobar-${TAG#v}.apk\`, then publishes it.
+          SUMMARY

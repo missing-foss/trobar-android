@@ -15,6 +15,9 @@ object Routes {
     const val BASKET = "basket"
     const val SETTINGS = "settings"
     const val ABOUT = "about"
+    const val SELECTIONS_DEVICE = "deviceId"
+    const val SELECTIONS = "selections/{$SELECTIONS_DEVICE}"
+    fun selections(deviceId: Long) = "selections/$deviceId"
     const val WIDGET_PREFS = "widget-prefs"
     /** The playlist subscriptions, pushed over the Playlists tab; [SUBSCRIPTIONS_URL]
      * carries a link shared from another app into the add field. */

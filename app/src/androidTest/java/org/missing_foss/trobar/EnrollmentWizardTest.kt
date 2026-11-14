@@ -47,6 +47,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import okhttp3.mockwebserver.MockResponse
@@ -125,8 +128,8 @@ class EnrollmentWizardTest {
      * from the QR/manual entry; the test supplies it directly since it's the
      * one value that has to point at the MockWebServer instance. */
     private fun connect(code: String = "ABCD1234") {
-        compose.onNodeWithText("Server URL").performTextInput(server.url("/").toString())
-        compose.onNodeWithText("Enrollment code").performTextInput(code)
+        compose.onNodeWithText("Server URL").performTextReplacement(server.url("/").toString())
+        compose.onNodeWithTag("enroll_code").performTextInput(code)
         compose.onNodeWithText("Continue").performClick()
     }
 
@@ -167,12 +170,58 @@ class EnrollmentWizardTest {
     }
 
     @Test
+    fun theAddressStartsAtHttpsAndThatAloneIsNotAnAddress() {
+        setWizard()
+        compose.onNodeWithText("https://").assertExists()
+        compose.onNodeWithTag("enroll_code").performTextInput("ABCD1234")
+        compose.onNodeWithText("Continue").assertIsNotEnabled()
+        compose.onNodeWithText("Server URL").performTextReplacement("music.example")
+        compose.onNodeWithText("Continue").assertIsNotEnabled()
+        compose.onNodeWithText("Server URL").performTextReplacement("https://music.example")
+        compose.onNodeWithText("Continue").assertIsEnabled()
+    }
+
+    @Test
+    fun aShortCodeIsNotEnough() {
+        setWizard()
+        compose.onNodeWithText("Server URL").performTextReplacement("https://music.example")
+        compose.onNodeWithTag("enroll_code").performTextInput("ABCD123")
+        compose.onNodeWithText("Continue").assertIsNotEnabled()
+    }
+
+    @Test
+    fun theCodeShowsInOneBoxPerCharacterInUpperCase() {
+        setWizard()
+        compose.onNodeWithTag("enroll_code").performTextInput("ab cd")
+        compose.onNodeWithText("A", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("D", useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun pasteFillsTheCodeFromTheClipboard() {
+        setWizard()
+        compose.runOnUiThread {
+            InstrumentationRegistry.getInstrumentation().targetContext.getSystemService(android.content.ClipboardManager::class.java)
+                .setPrimaryClip(android.content.ClipData.newPlainText("code", " abcd-1234\n"))
+        }
+        compose.onNodeWithTag("enroll_paste").performClick()
+        compose.onNodeWithText("Server URL").performTextReplacement("https://music.example")
+        compose.onNodeWithText("Continue").assertIsEnabled()
+    }
+
+    @Test
+    fun aCodeIsCleanedOfWhatAPasteBrings() {
+        assertEquals("ABCD1234", enrollCodeOf(" abcd-1234\n"))
+        assertEquals("ABCD1234", enrollCodeOf("ABCD1234EXTRA"))
+    }
+
+    @Test
     fun continueDisabledUntilBothFieldsFilled() {
         setWizard()
         compose.onNodeWithText("Continue").assertIsNotEnabled()
-        compose.onNodeWithText("Server URL").performTextInput(server.url("/").toString())
+        compose.onNodeWithText("Server URL").performTextReplacement(server.url("/").toString())
         compose.onNodeWithText("Continue").assertIsNotEnabled()
-        compose.onNodeWithText("Enrollment code").performTextInput("ABCD1234")
+        compose.onNodeWithTag("enroll_code").performTextInput("ABCD1234")
         // Now both fields are filled — Continue advances (checked by the
         // presence of step 2's field, the same "did it navigate" signal
         // the other tests use).

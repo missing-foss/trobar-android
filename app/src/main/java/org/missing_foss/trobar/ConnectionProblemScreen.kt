@@ -5,7 +5,6 @@ package org.missing_foss.trobar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -16,7 +15,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,6 +27,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.ui.platform.testTag
 
 /** #34: shown when the app can't operate against its server. A 401
  * (unauthorized — the server no longer knows this device, e.g. after a
@@ -39,7 +41,7 @@ import androidx.compose.ui.unit.dp
  * pairing on Retry's own account. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConnectionProblemScreen(
+fun ConnectionProblemCard(
     unauthorized: Boolean,
     serverUrl: String,
     onRetry: () -> Unit,
@@ -48,22 +50,24 @@ fun ConnectionProblemScreen(
 ) {
     var showServerDialog by remember { mutableStateOf(false) }
 
-    Scaffold { innerPadding ->
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth().testTag("connection_problem"),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+    ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(innerPadding).padding(24.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
         ) {
             Icon(
                 if (unauthorized) Icons.Filled.Lock else Icons.Filled.CloudOff,
                 contentDescription = null,
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier.size(32.dp),
                 tint = MaterialTheme.colorScheme.primary,
             )
             Spacer(Modifier.height(16.dp))
             Text(
                 stringResource(if (unauthorized) R.string.conn_unauthorized_title else R.string.conn_unreachable_title),
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleMedium,
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(8.dp))
@@ -71,9 +75,9 @@ fun ConnectionProblemScreen(
                 stringResource(if (unauthorized) R.string.conn_unauthorized_body else R.string.conn_unreachable_body),
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.outline,
+                color = MaterialTheme.colorScheme.onErrorContainer,
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(12.dp))
             if (unauthorized) {
                 Button(onClick = onReEnroll) { Text(stringResource(R.string.conn_re_enroll)) }
             } else {

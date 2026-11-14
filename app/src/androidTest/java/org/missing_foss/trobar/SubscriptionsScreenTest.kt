@@ -9,11 +9,13 @@
 package org.missing_foss.trobar
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -84,10 +86,41 @@ class SubscriptionsScreenTest {
     @Test
     fun thePrivacyPromiseStaysInViewAndTheRestIsBehindTheInfoIcon() {
         setScreen()
-        compose.onNodeWithText("Nothing is sent to YouTube and nothing is downloaded from it.").assertIsDisplayed()
-        compose.onAllNodesWithText("Public YouTube Music playlists only", substring = true).assertCountEquals(0)
+        compose.onNodeWithText("Nothing is sent to either service and nothing is downloaded from it.").assertIsDisplayed()
+        compose.onAllNodesWithText("Public YouTube Music, Spotify and Tidal playlists only", substring = true).assertCountEquals(0)
         compose.onNodeWithContentDescription("About Playlist subscriptions").performClick()
-        compose.onNodeWithText("Public YouTube Music playlists only", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Public YouTube Music, Spotify and Tidal playlists only", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun eachSubscriptionShowsItsProvidersGlyph() {
+        api.subscriptions += FakePlaylistApi.Subscription(1, "https://music.youtube.com/playlist?list=A", "Soft songs", 4, 3)
+        api.subscriptions += FakePlaylistApi.Subscription(
+            2, "https://open.spotify.com/playlist/B", "Night bus", 5, 0, provider = "spotify_public",
+        )
+        setScreen()
+        compose.waitForText("Soft songs")
+        compose.onNode(hasTestTag("provider_glyph_ytmusic"), useUnmergedTree = true).assertContentDescriptionEquals("YouTube Music")
+        compose.onNode(hasTestTag("provider_glyph_spotify_public"), useUnmergedTree = true).assertContentDescriptionEquals("Spotify")
+    }
+
+    @Test
+    fun aFailedFetchNamesTheServiceThatFailed() {
+        api.subscriptions += FakePlaylistApi.Subscription(
+            1, "https://music.youtube.com/playlist?list=A", "Tube", null, null, lastError = "timeout",
+        )
+        api.subscriptions += FakePlaylistApi.Subscription(
+            2, "https://open.spotify.com/playlist/B", "Spot", null, null, lastError = "timeout", provider = "spotify_public",
+        )
+        api.subscriptions += FakePlaylistApi.Subscription(
+            3, "https://tidal.com/browse/playlist/11111111-2222-4333-8444-555555555555", "Tide", null, null,
+            lastError = "rate_limited", provider = "tidal_public",
+        )
+        setScreen()
+        compose.waitForText("Tube")
+        compose.onNodeWithText("Couldn't reach YouTube Music. Nothing already imported was changed.").assertIsDisplayed()
+        compose.onNodeWithText("Couldn't read this playlist from Spotify. Nothing already imported was changed.").assertIsDisplayed()
+        compose.onNodeWithText("Couldn't read this playlist from Tidal. Nothing already imported was changed.").assertIsDisplayed()
     }
 
     @Test

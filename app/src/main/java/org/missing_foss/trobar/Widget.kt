@@ -18,6 +18,11 @@ object WidgetIds {
     const val RECENTLY_RELEASED = "recently_released"
     const val MOST_PLAYED = "most_played"
     const val ADMINISTRATION = "administration"
+    const val PLAYLISTS = "playlists"
+
+    /** The Playlists widget's row count, as the server holds it. */
+    val PLAYLISTS_RANGE = 1..10
+    const val PLAYLISTS_DEFAULT = 3
 
     /** The two widgets with a per-widget months setting, and its bounds, as the server holds them. */
     val MONTHS_WIDGETS = setOf(RECENTLY_ADDED, RECENTLY_RELEASED)
@@ -36,9 +41,20 @@ object WidgetIds {
         RECENTLY_RELEASED -> R.string.widget_recently_released
         MOST_PLAYED -> R.string.widget_most_played
         ADMINISTRATION -> R.string.widget_administration
+        PLAYLISTS -> R.string.widget_playlists
         else -> null
     }
 }
+
+/** Where a widget's rows lead, beyond the library: a device's selections, the
+ * Playlists tab, an album's page, and staging a playlist from where its row is. */
+class WidgetLinks(
+    val onOpenDevice: (Long) -> Unit = {},
+    val onOpenPlaylists: () -> Unit = {},
+    val onOpenPlaylist: (Long) -> Unit = {},
+    val onStagePlaylist: (id: Long, from: Rect) -> Unit = { _, _ -> },
+    val onOpenAlbum: (artist: String, album: String) -> Unit = { _, _ -> },
+)
 
 /** What the host hands a widget's content: the preferences in force, the
  * ids currently visible and the loaded data of every widget (a grid
@@ -50,6 +66,7 @@ class WidgetActions(
     val settings: WidgetSettings,
     val host: WidgetHost,
     val onOpenLibrary: () -> Unit,
+    val links: WidgetLinks = WidgetLinks(),
     val onStage: (target: String, coverUrl: String, from: Rect) -> Unit,
     val onSetMonths: (id: String, months: Int) -> Unit,
 )
@@ -61,6 +78,12 @@ class WidgetHost(
     val loaded: Map<String, Any>,
     val staging: StagingContext,
     val covers: Covers,
+    /** True from App API level 7: the album grids leave out what is selected
+     * for this phone, so an empty one says that is all there is. */
+    val leavesOutThisPhone: Boolean = false,
+    /** This phone's name as the server has it enrolled; null until the
+     * devices are read, or if it isn't among them. */
+    val thisDeviceName: String? = null,
 )
 
 /** One widget the phone can render: a loader that fetches its data with
@@ -69,7 +92,12 @@ class WidgetHost(
  * to show while loading or after a failure. */
 /** The two App API clients a loader may read: the dashboard's routes and
  * the rest (library, devices, basket). */
-class WidgetClients(val dashboard: AppApiDashboardClient, val app: AppApiClient)
+class WidgetClients(
+    val dashboard: AppApiDashboardClient,
+    val app: AppApiClient,
+    /** The header's device, for a widget about what is on it. */
+    val destination: () -> AppDevice? = { null },
+)
 
 interface Widget {
     val id: String
@@ -97,5 +125,6 @@ interface Widget {
 object WidgetRegistry {
     val all: Map<String, Widget> = listOf(
         LibraryStatsWidget, DevicesWidget, SuggestionsWidget, RecentlyAddedWidget, RecentlyReleasedWidget, MostPlayedWidget, AdministrationWidget,
+        PlaylistsWidget,
     ).associateBy { it.id }
 }

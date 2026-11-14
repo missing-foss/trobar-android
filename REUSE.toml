@@ -41,9 +41,9 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 missing-foss"
 SPDX-License-Identifier = "GPL-3.0-or-later"
 
-# --- .gitignore (no header) ------------------------------------------------
+# --- .gitignore, renovate.json (no header / no comment syntax) -------------
 [[annotations]]
-path = ".gitignore"
+path = [".gitignore", "renovate.json"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 missing-foss"
 SPDX-License-Identifier = "GPL-3.0-or-later"
@@ -80,6 +80,33 @@ SPDX-License-Identifier = "GPL-3.0-or-later"
 # one-line SVG for the other clients to copy -----------------------------------
 [[annotations]]
 path = "brand/trobar-mark-mono.svg"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 missing-foss"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# --- Gradle dependency lockfiles: generated, rewritten by --write-locks -----
+[[annotations]]
+path = ["app/gradle.lockfile", "freedroidwarn/gradle.lockfile", "buildscript-gradle.lockfile"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 missing-foss"
+SPDX-License-Identifier = "CC0-1.0"
+
+# --- Store listing texts (Fastlane): plain text read as-is, no room for a header
+[[annotations]]
+path = "fastlane/metadata/android/**/*.txt"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 missing-foss"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# --- FreeDroidWarn, vendored from upstream V1.14 (freedroidwarn/UPSTREAM.md) ---
+[[annotations]]
+path = ["freedroidwarn/src/main/java/**", "freedroidwarn/src/main/res/**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "woheller69 (https://github.com/woheller69/FreeDroidWarn)"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "freedroidwarn/src/main/AndroidManifest.xml"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 missing-foss"
 SPDX-License-Identifier = "GPL-3.0-or-later"

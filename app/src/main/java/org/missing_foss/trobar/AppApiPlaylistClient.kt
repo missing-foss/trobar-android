@@ -45,8 +45,21 @@ data class LidarrRequests(
 data class LidarrRun(val enabled: Boolean, val lastRunAt: String?, val lastCount: Int?, val lastError: String?, val lastErrorCode: String?)
 
 /** One entry of a playlist, in playlist order; [matched] is whether it
- * resolved to a track in the library. */
-data class PlaylistEntry(val position: Int, val artist: String?, val title: String?, val album: String?, val matched: Boolean)
+ * resolved to a track in the library, and [trackId] that track, null once it
+ * has left the library. [libraryArtist] and [libraryAlbum] are where the
+ * library files it, which the entry's own names need not match; a server
+ * from before they existed sends neither. */
+data class PlaylistEntry(
+    val position: Int, val artist: String?, val title: String?, val album: String?, val matched: Boolean,
+    val trackId: Long? = null, val libraryArtist: String? = null, val libraryAlbum: String? = null,
+    val entryId: Long? = null,
+) {
+    /** The artist page this entry opens in the Library. */
+    val openArtist: String? get() = libraryArtist ?: artist
+
+    /** The album it opens there, on that artist's page. */
+    val openAlbum: String? get() = libraryAlbum ?: album
+}
 
 /** An entry that did not resolve, for review; [excluded] marks it as not a gap. */
 /** [inferredAlbum] is the album the server found in MusicBrainz for an entry
@@ -86,12 +99,52 @@ class AppApiPlaylistClient(context: Context, serverUrl: String, token: String) {
         return List(arr.length()) { parsePlaylist(arr.getJSONObject(it)) }
     }
 
-    fun entries(playlistId: Long): List<PlaylistEntry> {
-        val arr = JSONArray(http.get(http.url("playlists", playlistId.toString(), "tracks"), "playlists/tracks"))
-        return List(arr.length()) {
-            val o = arr.getJSONObject(it)
-            PlaylistEntry(o.getInt("position"), o.stringOrNull("artist"), o.stringOrNull("title"), o.stringOrNull("album"), o.getBoolean("matched"))
-        }
+    fun entries(playlistId: Long): List<PlaylistEntry> =
+        parseEntries(JSONArray(http.get(http.url("playlists", playlistId.toString(), "tracks"), "playlists/tracks")))
+
+    private fun parseEntries(arr: JSONArray) = List(arr.length()) {
+        val o = arr.getJSONObject(it)
+        PlaylistEntry(
+            o.getInt("position"), o.stringOrNull("artist"), o.stringOrNull("title"), o.stringOrNull("album"),
+            o.getBoolean("matched"),
+            trackId = if (o.isNull("track_id")) null else o.optLong("track_id"),
+            libraryArtist = o.stringOrNull("library_artist"), libraryAlbum = o.stringOrNull("library_album"),
+            entryId = o.longOrNull("entry_id"),
+        )
+    }
+
+    /** A new empty playlist, the caller's and private; its id. */
+    fun create(title: String): Long =
+        JSONObject(http.send("POST", http.url("playlists"), JSONObject().put("title", title), "playlists")).getLong("id")
+
+    /** Appends library tracks, keeping every entry already there. */
+    fun append(playlistId: Long, trackIds: List<Long>) {
+        val body = JSONObject().put("track_ids", JSONArray(trackIds))
+        http.send("POST", http.url("playlists", playlistId.toString(), "tracks"), body, "playlists/tracks")
+    }
+
+    /** Appends a whole album, in disc and track order. */
+    fun appendAlbum(playlistId: Long, artist: String, album: String) {
+        val albums = JSONArray(listOf(JSONObject().put("artist", artist).put("album", album)))
+        http.send("POST", http.url("playlists", playlistId.toString(), "tracks"), JSONObject().put("albums", albums), "playlists/tracks")
+    }
+
+    fun rename(playlistId: Long, title: String) {
+        http.send("PATCH", http.url("playlists", playlistId.toString()), JSONObject().put("title", title), "playlists")
+    }
+
+    /** Deletes a playlist, with its selections and its mirrors. */
+    fun delete(playlistId: Long) {
+        http.send("DELETE", http.url("playlists", playlistId.toString()), null, "playlists")
+    }
+
+    /** Replaces the entries with these, in this order, and answers the list
+     * as it now stands: its fresh ids are what the next write must send. */
+    fun replaceEntries(playlistId: Long, entryIds: List<Long>): List<PlaylistEntry> {
+        val items = JSONArray(entryIds.map { JSONObject().put("entry_id", it) })
+        val body = JSONObject().put("items", items)
+        val answer = http.send("PUT", http.url("playlists", playlistId.toString(), "tracks"), body, "playlists/tracks")
+        return parseEntries(JSONObject(answer).getJSONArray("entries"))
     }
 
     /** Starts a provider sync; an IOException carries the server's own

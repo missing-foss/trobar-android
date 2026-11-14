@@ -6,11 +6,13 @@
 // albums before the similar artists and those in a strip every entry of
 // which is reachable whole, and staging by double-tap: the server's
 // type/target vocabulary, the header's device, the cover's flight, the
-// badge moving on the server's answer, and a single tap doing nothing.
+// badge moving on the server's answer, and a single tap opening the album:
+// its details, its tracklist, and one track going on a playlist.
 
 package org.missing_foss.trobar
 
 import android.os.ParcelFileDescriptor
+import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -33,7 +35,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isToggleable
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.performTextClearance
@@ -54,6 +56,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockWebServer
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -65,11 +68,12 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class LibraryScreenTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private lateinit var server: MockWebServer
     private lateinit var api: FakeAppApi
+    private lateinit var shared: AppState
     private var animatorScale: String? = null
 
     @Before
@@ -77,7 +81,9 @@ class LibraryScreenTest {
         runBlocking {
             Prefs.setNetworkMode(context, Prefs.NETWORK_ANY)
             Prefs.clearHeaderDevice(context)
+            Prefs.setAppApi(context, APP_API_ALBUM_TRACKS)
         }
+        java.io.File(context.filesDir, "library_artists.json").delete()
         api = FakeAppApi()
         api.artist("Nebula Drift", Triple("Slow Collapse", 2021, 9), Triple("Drift", 2018, 7), Triple("Echoes", null, 5))
         api.artist("Aphelion", Triple("Parallax", 2022, 9), Triple("Event Horizon", 2019, 11))
@@ -95,9 +101,13 @@ class LibraryScreenTest {
         animatorScale?.let(::putAnimatorScale)
     }
 
-    private fun setScreen(fontScale: Float? = null, wide: Boolean = false, widthDp: Int? = null) {
+    private fun setScreen(
+        fontScale: Float? = null, wide: Boolean = false, widthDp: Int? = null, target: LibraryTarget? = null,
+    ) {
         val pairing = Prefs.Pairing(serverUrl = server.url("/").toString(), token = "test-token")
         val shared = testAppState(context, pairing)
+        this.shared = shared
+        target?.let(shared::openInLibrary)
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(
@@ -143,6 +153,275 @@ class LibraryScreenTest {
 
     private fun inStrip(name: String, unmerged: Boolean = false): SemanticsNodeInteraction =
         compose.onNode(hasText(name) and hasAnyAncestor(hasTestTag(STRIP)), useUnmergedTree = unmerged)
+
+    private fun byAlbumArtist() {
+        runBlocking { Prefs.setAppApi(context, APP_API_ALBUM_ARTISTS) }
+        api.albumArtistRows += JSONObject().put("artist", "Aphelion").put("track_count", 11).put("album_count", 1)
+            .put("appears_on_count", 1).put("albums", org.json.JSONArray(listOf("Parallax")))
+        api.albumArtistRows += JSONObject().put("artist", "Mara Ostrom").put("track_count", 0).put("album_count", 0)
+            .put("appears_on_count", 2).put("albums", org.json.JSONArray())
+        api.albumArtistRows += JSONObject().put("artist", "Various Artists").put("track_count", 14).put("album_count", 1)
+            .put("appears_on_count", 0).put("albums", org.json.JSONArray(listOf("Night Drive")))
+        api.albumArtistAlbums["Aphelion"] = listOf(Triple("Parallax", 2022, 9))
+        api.albumArtistAlbums["Various Artists"] = listOf(Triple("Night Drive", 2020, 3))
+        api.appearsOn["Aphelion"] = listOf(
+            JSONObject().put("album", "Night Drive").put("album_artist", "Various Artists").put("year", 2020).put("track_count", 2),
+        )
+        api.albumTracks["Various Artists||Night Drive"] = listOf(
+            track(1, "Theirs One", 1, 1), track(2, "Someone Else", 1, 2, artist = "Mara Ostrom"), track(3, "Theirs Two", 1, 3),
+        )
+    }
+
+    private fun openAppearsOn() {
+        byAlbumArtist()
+        setScreen()
+        openAphelion()
+        compose.onNodeWithTag("album_list").performScrollToNode(hasTestTag("appears_on"))
+        compose.onNodeWithText("Night Drive").performClick()
+        settle()
+        compose.waitForText("Theirs One")
+    }
+
+    @Test
+    fun atLevelSixTheListCountsWhatThePageLists() {
+        byAlbumArtist()
+        setScreen()
+        compose.waitForText("Various Artists")
+        compose.onNodeWithText("1 album · appears on 1").assertExists()
+        compose.onNodeWithText("appears on 2").assertExists()
+    }
+
+    @Test
+    fun belowLevelSixTheLibraryIsWhatItWas() {
+        byAlbumArtist()
+        runBlocking { Prefs.setAppApi(context, APP_API_ALBUM_TRACKS) }
+        setScreen()
+        compose.waitForText("Nebula Drift")
+        compose.onAllNodesWithText("Various Artists").assertCountEquals(0)
+        compose.onNodeWithText("Aphelion").performClick()
+        compose.waitForText("Event Horizon")
+        compose.onAllNodes(hasTestTag("appears_on")).assertCountEquals(0)
+    }
+
+    private fun fromHomeOnAGuestsCard() {
+        byAlbumArtist()
+        api.albumTracks["Aphelion||Night Drive"] = listOf(track(1, "Theirs One", 1, 1), track(3, "Theirs Two", 1, 3))
+        setScreen(target = LibraryTarget("Aphelion", "Night Drive", details = true))
+        compose.waitForText("Someone Else")
+    }
+
+    @Test
+    fun aGuestsCardFromHomeOpensTheWholeAlbumWithTheirTracksMarked() {
+        fromHomeOnAGuestsCard()
+        compose.onNodeWithTag("album_only_theirs").assertTextEquals("Add to basket adds only Aphelion's tracks: 2 of 3.")
+        compose.onAllNodes(hasTestTag("album_track_theirs")).assertCountEquals(2)
+        compose.onNodeWithText("Various Artists").assertExists()
+    }
+
+    @Test
+    fun aGuestsCardFromHomeHasItsYear() {
+        fromHomeOnAGuestsCard()
+        compose.onNodeWithTag("album_facts").assertTextEquals("2020 · 3 tracks")
+    }
+
+    @Test
+    fun anAlbumFromAlsoAppearsOnHasItsYear() {
+        openAppearsOn()
+        compose.onNodeWithTag("album_facts").assertTextEquals("2020 · 3 tracks")
+    }
+
+    @Test
+    fun yourOwnAlbumStaysYoursWhenAnAppearsOnRowSharesItsName() {
+        byAlbumArtist()
+        api.albumArtistAlbums["Aphelion"] = listOf(Triple("Greatest Hits", 2021, 2))
+        api.appearsOn["Aphelion"] = listOf(
+            JSONObject().put("album", "Greatest Hits").put("album_artist", "Various Artists").put("year", 2010).put("track_count", 1),
+        )
+        api.albumTracks["Aphelion||Greatest Hits"] = listOf(track(1, "Mine One", 1, 1), track(2, "Mine Two", 1, 2))
+        api.albumTracks["Various Artists||Greatest Hits"] = listOf(track(3, "Not Mine", 1, 1))
+        setScreen()
+        compose.waitForText("Aphelion")
+        compose.onNodeWithText("Aphelion").performClick()
+        compose.waitForText("Greatest Hits")
+        compose.onAllNodesWithText("Greatest Hits")[0].performClick()
+        settle()
+        compose.waitForText("Mine One")
+        compose.onAllNodes(hasTestTag("album_track_theirs")).assertCountEquals(0)
+        compose.onAllNodes(hasTestTag("album_only_theirs")).assertCountEquals(0)
+        compose.onAllNodesWithText("Not Mine").assertCountEquals(0)
+    }
+
+    @Test
+    fun theCoverViewListsAlsoAppearsOnToo() {
+        byAlbumArtist()
+        api.coverViewMode = "grid"
+        setScreen()
+        openAphelion()
+        compose.onNodeWithTag("album_grid").performScrollToNode(hasTestTag("appears_on"))
+        compose.onNodeWithText("Night Drive").assertExists()
+    }
+
+    @Test
+    fun aServerErrorOnAppearsOnLeavesTheArtistsPageWhole() {
+        byAlbumArtist()
+        api.failAppearsOn = true
+        setScreen()
+        openAphelion()
+        settle()
+        compose.onAllNodes(hasTestTag("appears_on")).assertCountEquals(0)
+        compose.onNodeWithText("Parallax").assertExists()
+    }
+
+    @Test
+    fun aDroppedConnectionOnAppearsOnLeavesTheArtistsPageWhole() {
+        byAlbumArtist()
+        api.dropAppearsOn = true
+        setScreen()
+        openAphelion()
+        settle()
+        compose.onAllNodes(hasTestTag("appears_on")).assertCountEquals(0)
+        compose.onNodeWithText("Parallax").assertExists()
+    }
+
+    @Test
+    fun theSavedListKeepsTheAppearsOnCount() {
+        val cache = LibraryCache(context, serverUrl)
+        cache.write(listOf(LibraryArtist("Mara", 0, 0, emptyList(), appearsOnCount = 2)), 1L)
+        assertEquals(2, cache.read()!!.artists.single().appearsOnCount)
+    }
+
+    @Test
+    fun anAlbumFromAlsoAppearsOnShowsWholeWithTheirTracksMarked() {
+        openAppearsOn()
+        compose.onNodeWithText("Various Artists").assertExists()
+        compose.onNodeWithTag("album_only_theirs").assertTextEquals("Add to basket adds only Aphelion's tracks: 2 of 3.")
+        compose.onAllNodes(hasTestTag("album_track_theirs")).assertCountEquals(2)
+        compose.onAllNodes(hasTestTag("album_track")).assertCountEquals(1)
+    }
+
+    @Test
+    fun addToBasketFromAlsoAppearsOnStagesOnlyTheirTracks() {
+        openAppearsOn()
+        compose.onNodeWithTag("album_add_to_basket").performClick()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { api.staged.size == 1 }
+        assertEquals(Triple("album", "Aphelion||Night Drive", listOf(1L)), api.staged.single())
+    }
+
+    @Test
+    fun aDoubleTapOnAlsoAppearsOnStagesOnlyTheirTracks() {
+        byAlbumArtist()
+        setScreen()
+        openAphelion()
+        compose.onNodeWithTag("album_list").performScrollToNode(hasTestTag("appears_on"))
+        compose.onNodeWithText("Night Drive").performTouchInput { doubleClick() }
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { api.staged.size == 1 }
+        assertEquals(Triple("album", "Aphelion||Night Drive", listOf(1L)), api.staged.single())
+    }
+
+    @Test
+    fun theAlbumArtistOnAlsoAppearsOnOpensThatArtist() {
+        byAlbumArtist()
+        setScreen()
+        openAphelion()
+        compose.onNodeWithTag("album_list").performScrollToNode(hasTestTag("appears_on"))
+        compose.onNodeWithText("Various Artists").performClick()
+        // Parallax is Aphelion's: gone, the page is the album artist's own.
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) {
+            compose.onAllNodesWithText("Parallax").fetchSemanticsNodes().isEmpty()
+        }
+        compose.waitForText("Night Drive")
+        compose.onNodeWithText("Various Artists").assert(isHeading())
+        compose.onAllNodes(hasTestTag("appears_on")).assertCountEquals(0)
+    }
+
+    private val serverUrl get() = server.url("/").toString()
+
+    /** What a first run read while online, from [from]. */
+    private fun saveTheList(from: String = serverUrl) {
+        LibraryCache(context, from).write(
+            listOf(LibraryArtist("Saved Artist", 3, 1, listOf("Saved Album"))),
+            System.currentTimeMillis() - 2 * 60 * 60 * 1000,
+        )
+    }
+
+    @Test
+    fun offlineTheSavedListShowsWithItsAgeAndRetryReadsAgain() {
+        saveTheList()
+        api.dropArtists = true
+        setScreen()
+        compose.waitForText("Saved Artist")
+        compose.onNodeWithTag("library_offline").assertIsDisplayed()
+        compose.waitForText("Offline · last updated 2 hours ago")
+        api.dropArtists = false
+        compose.onNodeWithText("Retry").performClick()
+        compose.waitForText("Aphelion")
+        compose.onAllNodes(hasTestTag("library_offline")).assertCountEquals(0)
+    }
+
+    @Test
+    fun aListReadOnlineIsSavedForLater() {
+        setScreen()
+        compose.waitForText("Aphelion")
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) {
+            LibraryCache(context, serverUrl).read()?.artists?.any { it.artist == "Aphelion" && it.albums != null } == true
+        }
+    }
+
+    @Test
+    fun withNoSavedListAFailureStillSaysSo() {
+        api.dropArtists = true
+        setScreen()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) {
+            compose.onAllNodes(hasTestTag("artist_search")).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onAllNodes(hasTestTag("library_offline")).assertCountEquals(0)
+    }
+
+    @Test
+    fun anotherServersListIsNotShownAsThisOnes() {
+        saveTheList(from = "https://another.example/")
+        api.dropArtists = true
+        setScreen()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) {
+            compose.onAllNodes(hasTestTag("artist_search")).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onAllNodesWithText("Saved Artist").assertCountEquals(0)
+    }
+
+    @Test
+    fun aServerErrorStillShowsTheErrorNotTheSavedList() {
+        saveTheList()
+        api.failArtists = true
+        setScreen()
+        compose.waitForText("down")
+        compose.onAllNodesWithText("Saved Artist").assertCountEquals(0)
+    }
+
+    @Test
+    fun aRefusedTokenStillShowsTheErrorNotTheSavedList() {
+        saveTheList()
+        api.refuseArtists = true
+        setScreen()
+        compose.waitForText("refused")
+        compose.onAllNodesWithText("Saved Artist").assertCountEquals(0)
+    }
+
+    @Test
+    fun unpairingRemovesTheSavedList() {
+        saveTheList()
+        runBlocking { SyncWorker.unpair(context) }
+        assertEquals(null, LibraryCache(context, serverUrl).read())
+    }
+
+    @Test
+    fun theSearchHasAClearButtonOnceThereIsSomethingToClear() {
+        setScreen()
+        compose.waitForText("Aphelion")
+        compose.onAllNodes(hasContentDescription("Clear the search")).assertCountEquals(0)
+        compose.onNodeWithTag("artist_search").performTextInput("zzz")
+        compose.onNodeWithContentDescription("Clear the search").performClick()
+        compose.waitForText("Aphelion")
+    }
 
     @Test
     fun searchFiltersAndSortTogglesTheArtistList() {
@@ -201,6 +480,43 @@ class LibraryScreenTest {
             setOf("Aphelion" to "small", "Cinder & Ash" to "small", "Nebula Drift" to "small"),
             synchronized(api.artistImageAsked) { api.artistImageAsked.toSet() },
         )
+    }
+
+    @Test
+    fun aReloadDoesNotLoseWhereAnotherTabAskedTheLibraryToOpen() {
+        val pairing = Prefs.Pairing(serverUrl = server.url("/").toString(), token = "test-token")
+        val state = testAppState(context, pairing)
+        state.openInLibrary(LibraryTarget("Aphelion"))
+        runBlocking { state.reload() }
+        assertEquals(LibraryTarget("Aphelion"), state.state.value.libraryTarget)
+    }
+
+    @Test
+    fun anotherTabCanOpenAnArtistPage() {
+        setScreen(target = LibraryTarget("Aphelion"))
+        compose.waitForText("Sync entire artist")
+        compose.onNodeWithText("Aphelion").assertIsDisplayed()
+        // Cleared, or the Library would reopen it over wherever the person went.
+        assertEquals(null, shared.state.value.libraryTarget)
+    }
+
+    @Test
+    fun anotherTabCanOpenAnAlbumFarDownAnArtistsPage() {
+        val many = (1..60).map { Triple("Album $it", 2000 + it, 3) }.toTypedArray()
+        api.artist("Many", *many)
+        setScreen(target = LibraryTarget("Many", "Album 55"))
+        compose.waitForText("Album 55")
+        compose.onNodeWithText("Album 55").assertIsDisplayed()
+        compose.onAllNodesWithText("Album 1").assertCountEquals(0)
+    }
+
+    @Test
+    fun anAlbumNotOnThePageLeavesItAtTheTop() {
+        val many = (1..60).map { Triple("Album $it", 2000 + it, 3) }.toTypedArray()
+        api.artist("Many", *many)
+        setScreen(target = LibraryTarget("Many", "Not here"))
+        compose.waitForText("Album 1")
+        compose.onNodeWithText("Sync entire artist").assertIsDisplayed()
     }
 
     @Test
@@ -300,25 +616,241 @@ class LibraryScreenTest {
     }
 
     @Test
-    fun aSingleTapOnAnAlbumDoesNothing() = singleTapDoesNothing(grid = false)
+    fun aSingleTapOnAnAlbumOpensItAndStagesNothing() = singleTapOpens(grid = false)
 
     @Test
-    fun aSingleTapOnACoverDoesNothing() = singleTapDoesNothing(grid = true)
+    fun aSingleTapOnACoverOpensItAndStagesNothing() = singleTapOpens(grid = true)
 
-    private fun singleTapDoesNothing(grid: Boolean) {
+    private fun singleTapOpens(grid: Boolean) {
         if (grid) api.coverViewMode = "grid"
+        twoDiscs()
         setScreen()
         openAphelion()
         compose.onNodeWithText("Parallax").performTouchInput { click() }
         settle()
+        compose.onNodeWithTag("album_details").assertIsDisplayed()
+        compose.waitForText("Singularity")
         assertTrue("a single tap wrote ${api.staged}", api.staged.isEmpty())
         compose.onAllNodes(hasTestTag(FLIGHT), useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodes(badge(1)).assertCountEquals(0)
-        // Nothing left of the selection: no checkboxes, no count, no add button, no sheet.
-        compose.onAllNodes(isToggleable()).assertCountEquals(0)
-        compose.onAllNodesWithText("selected", substring = true).assertCountEquals(0)
-        compose.onAllNodesWithText("to the basket", substring = true).assertCountEquals(0)
-        compose.onAllNodesWithText("Add & ", substring = true).assertCountEquals(0)
+    }
+
+    private fun track(id: Long, title: String, disc: Int?, no: Int?, artist: String = "Aphelion", duration: Int? = 252) =
+        JSONObject().put("id", id).put("title", title).put("disc_no", disc ?: JSONObject.NULL)
+            .put("track_no", no ?: JSONObject.NULL).put("artist", artist).put("duration", duration ?: JSONObject.NULL)
+
+    private fun twoDiscs() {
+        api.albumTracks["Aphelion||Parallax"] = listOf(
+            track(1, "Singularity", 1, 1), track(2, "Perihelion", 1, 2, artist = "Guest Star"), track(3, "Afterglow", 2, 1),
+        )
+    }
+
+    private fun openParallax() {
+        setScreen()
+        openAphelion()
+        compose.onNodeWithText("Parallax").performClick()
+        settle()
+        compose.waitForText("Singularity")
+    }
+
+    @Test
+    fun anAlbumShowsItsYearDiscsAndAGuestsName() {
+        twoDiscs()
+        openParallax()
+        compose.onNodeWithTag("album_facts").assertTextEquals("2022 · 3 tracks")
+        compose.onNodeWithText("Parallax").assert(isHeading())
+        compose.onNodeWithText("Disc 1").assertIsDisplayed()
+        compose.onNodeWithText("Disc 2").assertIsDisplayed()
+        compose.onNodeWithText("Guest Star").assertIsDisplayed()
+        compose.onAllNodesWithText("4:12", useUnmergedTree = true).assertCountEquals(3)
+        compose.onAllNodesWithText("Aphelion").assertCountEquals(1) // the album's artist, on no track
+    }
+
+    @Test
+    fun aOneDiscAlbumHasNoDiscHeading() {
+        api.albumTracks["Aphelion||Parallax"] = listOf(track(1, "Singularity", 1, 1), track(2, "Perihelion", 1, 2))
+        openParallax()
+        compose.onAllNodesWithText("Disc", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun addToBasketStagesTheAlbumAndThenSaysItIsIn() {
+        twoDiscs()
+        openParallax()
+        compose.onNodeWithTag("album_add_to_basket").assertTextEquals("Add to basket").performClick()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { api.staged.size == 1 }
+        assertEquals(Triple("album", "Aphelion||Parallax", listOf(1L)), api.staged.single())
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) {
+            compose.onAllNodesWithText("In the basket").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    @Test
+    fun aTappedTrackGoesOnAPlaylistYouCanEditAndOnlyThose() {
+        twoDiscs()
+        api.playlists += Triple(11L, "Morning run", "trobar")
+        api.playlists += Triple(12L, "From Subsonic", "subsonic")
+        openParallax()
+        compose.onNodeWithText("Perihelion").performClick()
+        compose.waitForText("Morning run")
+        compose.onAllNodesWithText("From Subsonic").assertCountEquals(0)
+        compose.onNodeWithText("Morning run").performClick()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { api.appended.size == 1 }
+        assertEquals(11L to listOf(2L), api.appended.single())
+        compose.waitForText("Added to “Morning run”")
+    }
+
+    @Test
+    fun someoneElsesPlaylistIsNotOfferedToANonAdmin() {
+        twoDiscs()
+        api.playlists += Triple(11L, "Mine", "trobar")
+        api.playlists += Triple(13L, "Someone else's", "trobar")
+        api.othersPlaylists += 13L
+        openParallax()
+        compose.onNodeWithText("Perihelion").performClick()
+        compose.waitForText("Mine")
+        compose.onAllNodesWithText("Someone else's").assertCountEquals(0)
+    }
+
+    @Test
+    fun anAdminIsOfferedSomeoneElsesPlaylist() {
+        twoDiscs()
+        api.isAdmin = true
+        api.playlists += Triple(13L, "Someone else's", "trobar")
+        api.othersPlaylists += 13L
+        openParallax()
+        compose.onNodeWithText("Perihelion").performClick()
+        compose.waitForText("Someone else's")
+    }
+
+    @Test
+    fun systemBackClosesTheAlbumAndShowsItsArtist() {
+        twoDiscs()
+        openParallax()
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForText("Event Horizon")
+        compose.onAllNodes(hasTestTag("album_details")).assertCountEquals(0)
+    }
+
+    @Test
+    fun aTracklistThatFailsToLoadClosesTheAlbumAndSaysWhy() {
+        api.failAlbumTracks = true
+        setScreen()
+        openAphelion()
+        compose.onNodeWithText("Parallax").performClick()
+        settle()
+        compose.waitForText("no tracks today", substring = true)
+        compose.onAllNodes(hasTestTag("album_details")).assertCountEquals(0)
+        compose.onNodeWithText("Event Horizon").assertIsDisplayed()
+    }
+
+    @Test
+    fun theWholeAlbumGoesOnAPlaylist() {
+        twoDiscs()
+        api.playlists += Triple(11L, "Morning run", "trobar")
+        openParallax()
+        compose.onNodeWithTag("album_add_to_playlist").performClick()
+        compose.waitForText("Morning run")
+        compose.onNodeWithText("Morning run").performClick()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { api.appendedAlbums.size == 1 }
+        val sent = JSONObject(api.appendedAlbums.single())
+        assertEquals("Aphelion" to "Parallax", sent.getString("artist") to sent.getString("album"))
+        compose.waitForText("Added to “Morning run”")
+    }
+
+    @Test
+    fun aNewPlaylistForAnAlbumIsNamedAfterIt() {
+        twoDiscs()
+        openParallax()
+        compose.onNodeWithTag("album_add_to_playlist").performClick()
+        compose.waitForText("New playlist…")
+        compose.onNodeWithText("New playlist…").performClick()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { api.appendedAlbums.size == 1 }
+        assertEquals(listOf("Parallax"), api.created.toList())
+    }
+
+    @Test
+    fun addToPlaylistIsNotOfferedBelowLevelFive() {
+        twoDiscs()
+        runBlocking { Prefs.setAppApi(context, APP_API_ALBUM_TRACKS - 1) }
+        setScreen()
+        openAphelion()
+        compose.onNodeWithText("Parallax").performClick()
+        settle()
+        compose.onNodeWithTag("album_details").assertIsDisplayed()
+        compose.onAllNodes(hasTestTag("album_add_to_playlist")).assertCountEquals(0)
+    }
+
+    @Test
+    fun addToPlaylistFromAlsoAppearsOnSendsTheArtistsOwnKey() {
+        api.playlists += Triple(11L, "Morning run", "trobar")
+        openAppearsOn()
+        compose.onNodeWithTag("album_add_to_playlist").performClick()
+        compose.waitForText("Morning run")
+        compose.onNodeWithText("Morning run").performClick()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { api.appendedAlbums.size == 1 }
+        val sent = JSONObject(api.appendedAlbums.single())
+        assertEquals("Aphelion" to "Night Drive", sent.getString("artist") to sent.getString("album"))
+    }
+
+    @Test
+    fun aNewPlaylistIsNamedAfterTheTrack() {
+        twoDiscs()
+        openParallax()
+        compose.onNodeWithText("Afterglow").performClick()
+        compose.waitForText("New playlist…")
+        compose.onNodeWithText("New playlist…").performClick()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { api.appended.size == 1 }
+        assertEquals(listOf("Afterglow"), api.created.toList())
+        assertEquals(FakeAppApi.NEW_PLAYLIST_ID to listOf(3L), api.appended.single())
+    }
+
+    @Test
+    fun belowLevelFiveThereIsNoTracklistAndTheAlbumStillStages() {
+        twoDiscs()
+        runBlocking { Prefs.setAppApi(context, APP_API_ALBUM_TRACKS - 1) }
+        setScreen()
+        openAphelion()
+        compose.onNodeWithText("Parallax").performClick()
+        settle()
+        compose.onNodeWithTag("album_update_server").assertIsDisplayed()
+        compose.onAllNodesWithText("Singularity").assertCountEquals(0)
+        compose.onNodeWithTag("album_add_to_basket").performClick()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { api.staged.size == 1 }
+    }
+
+    @Test
+    fun backFromAnAlbumIsItsArtistAndOnAWideLayoutToo() {
+        twoDiscs()
+        setScreen(wide = true)
+        openAphelion()
+        compose.onNodeWithText("Parallax").performClick()
+        settle()
+        compose.waitForText("Singularity")
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.waitForText("Event Horizon")
+        compose.onAllNodes(hasTestTag("album_details")).assertCountEquals(0)
+    }
+
+    @Test
+    fun anotherTabCanOpenAnAlbumsDetails() {
+        twoDiscs()
+        setScreen(target = LibraryTarget("Aphelion", "Parallax", details = true))
+        compose.waitForText("Singularity")
+        compose.onNodeWithTag("album_details").assertIsDisplayed()
+    }
+
+    @Test
+    fun theDetailsHoldAtTheLargestFontScaleOnANarrowPhone() {
+        twoDiscs()
+        setScreen(fontScale = LARGEST_FONT_SCALE, widthDp = NARROW_DP)
+        openAphelion()
+        compose.onNodeWithText("Parallax").performClick()
+        settle()
+        compose.waitForText("Singularity")
+        compose.onNodeWithTag("album_add_to_basket").assertIsDisplayed()
+        val width = compose.onNodeWithTag("album_details").getUnclippedBoundsInRoot().width
+        assertEquals(NARROW_DP.toFloat(), width.value, SIZE_TOLERANCE_DP)
     }
 
     @Test
@@ -502,6 +1034,7 @@ class LibraryScreenTest {
         const val SIMILAR_LABEL = "Similar artists in your library"
         const val LARGEST_FONT_SCALE = 2f
         const val SIZE_TOLERANCE_DP = 0.5f
+        const val NARROW_DP = 320
         // More than a phone's width holds, one very long, and more than the eight the row used to cap at.
         val LONG_SIMILAR = listOf(
             "Nebula Drift", "Cinder & Ash", "The Presidents of the United States of America", "The White Stripes",

@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -137,6 +138,65 @@ class SimpleModeTest {
         compose.waitForText("App mode")
         compose.onNodeWithText("App mode").performScrollTo().performClick()
         compose.onNodeWithText(option).performClick()
+    }
+
+    /** Settings → Auto-sync, on the Simple Settings screen. */
+    private fun openNetworkChoice() {
+        compose.waitForText("Auto-sync")
+        compose.onNodeWithText("Auto-sync").performScrollTo().performClick()
+    }
+
+    @Test
+    fun aDapCanChooseToSyncOverAPhonesHotspot() {
+        runBlocking { Prefs.setNetworkMode(context, Prefs.NETWORK_WIFI_ONLY) }
+        setApp(DAP)
+        waitFor(simpleScreen)
+        compose.onNodeWithTag("open_settings").performClick()
+        openNetworkChoice()
+        // No mobile-data choices on a device without mobile data.
+        // (in the row, as the current choice, and in the list)
+        assertTrue("unmetered option", shows(hasText("Unmetered networks only")))
+        assertTrue("no mobile data option", !shows(hasText("Wi-Fi + mobile data")))
+        compose.onNodeWithText("Any network, phone hotspots too").performClick()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) {
+            runBlocking { Prefs.networkMode(context).first() } == Prefs.NETWORK_ANY
+        }
+    }
+
+    @Test
+    fun aDapsHotspotChoiceIsNotResetToWifiOnly() {
+        // The old Settings forced Wi-Fi only on every open without telephony.
+        runBlocking { Prefs.setNetworkMode(context, Prefs.NETWORK_ANY) }
+        setApp(DAP)
+        waitFor(simpleScreen)
+        compose.onNodeWithTag("open_settings").performClick()
+        compose.waitForText("Auto-sync")
+        compose.waitForIdle()
+        assertEquals(Prefs.NETWORK_ANY, runBlocking { Prefs.networkMode(context).first() })
+    }
+
+    @Test
+    fun aDapStoredOnWifiAndMobileIsShownAsUnmeteredOnly() {
+        // A mode a DAP can't offer (left from a backup, say) becomes the one
+        // it can, so the row always shows a choice.
+        runBlocking { Prefs.setNetworkMode(context, Prefs.NETWORK_WIFI_AND_MOBILE) }
+        setApp(DAP)
+        waitFor(simpleScreen)
+        compose.onNodeWithTag("open_settings").performClick()
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) {
+            runBlocking { Prefs.networkMode(context).first() } == Prefs.NETWORK_WIFI_ONLY
+        }
+    }
+
+    @Test
+    fun aPhoneKeepsItsMobileDataChoices() {
+        setApp(PHONE)
+        waitFor(homeTab)
+        compose.onNode(hasContentDescription("Settings") and isSelectable()).performClick()
+        openNetworkChoice()
+        compose.onNodeWithText("Wi-Fi + mobile data").assertExists()
+        assertTrue("no DAP wording", !shows(hasText("Unmetered networks only")))
+        pressBack()
     }
 
     @Test

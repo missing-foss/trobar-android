@@ -8,8 +8,11 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.ServiceInfo
 import android.net.Uri
+import android.os.SystemClock
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.Data
@@ -28,8 +31,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.concurrent.TimeUnit
 
 /** Runs on WorkManager rather than a plain Activity-scoped coroutine —
@@ -62,19 +63,37 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         // likely a DAP's minimal/customized Android build) kill background
         // work anyway despite that contract — foreground services are far
         // better protected against that class of aggressive process kill.
-        setForeground(buildForegroundInfo(applicationContext, 0, 0))
+        val promoter = ForegroundPromoter { setForeground(it) }
+        promoter.promote(buildForegroundInfo(applicationContext, 0, 0))
 
         val api = ApiClient(applicationContext, pairing.serverUrl, pairing.token)
+        val throttle = ProgressThrottle(PROGRESS_MIN_INTERVAL_MS)
+        var plan: SyncPlan? = null
         val result = SyncEngine.run(applicationContext, api, treeUri, nomediaEnabled, missingFileBehavior,
             recoveryPending) { p ->
-            // setProgress/setForeground are suspend; this callback isn't
-            // (SyncEngine.run calls it from plain code) — already on a
-            // background dispatcher here, so blocking briefly is fine.
-            runBlocking {
-                setProgress(workDataOf(KEY_DONE to p.done, KEY_TOTAL to p.total, KEY_SCANNING to p.scanning))
-                setForeground(buildForegroundInfo(applicationContext, p.done, p.total, p.scanning))
+            p.plan?.let { plan = it }
+            // Downloads run in parallel, each reporting per track: posting
+            // every one hits NotificationManager's rate limit and holds a
+            // download thread on it, so updates are spaced out.
+            if (throttle.due(p.done, p.total, p.scanning, SystemClock.elapsedRealtime())) {
+                // setProgress/setForeground are suspend; this callback isn't
+                // (SyncEngine.run calls it from plain code) — already on a
+                // background dispatcher here, so blocking briefly is fine.
+                runBlocking {
+                    setProgress(workDataOf(
+                        KEY_DONE to p.done, KEY_TOTAL to p.total, KEY_SCANNING to p.scanning,
+                        KEY_PLAN_TRACKS to plan?.tracks, KEY_PLAN_BYTES to plan?.bytes, KEY_PLAN_FREE to plan?.freeBytes,
+                    ))
+                    promoter.promote(buildForegroundInfo(applicationContext, p.done, p.total, p.scanning, plan))
+                }
             }
         }
+
+        // What the sync wrote or removed, told to the media index so players
+        // that read MediaStore see it now; best-effort, like the rest here.
+        try {
+            MediaIndex.afterSync(applicationContext, Uri.parse(treeUri), result.changedPaths, nomediaEnabled)
+        } catch (ignored: Exception) { /* the files are there either way */ }
 
         // only ever non-empty when missingFileBehavior is "ask";
         // overwritten every run (not merged) so a batch the user already
@@ -96,7 +115,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             // being told the folder is empty. Not defaulted to 0 here, and
             // that is the whole point of it being nullable.
             try {
-                api.reportStorage(stats.freeBytes, stats.totalBytes, result.foreignBytes)
+                api.reportStorage(stats.freeBytes, stats.totalBytes, result.foreignBytes, spaceReserve(stats.totalBytes))
             } catch (ignored: Exception) { /* best-effort, not fatal */ }
         }
 
@@ -106,40 +125,67 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         // SAF write failure shouldn't also block fingerprint bookkeeping).
         ProvenanceStore(applicationContext).use { store ->
             try {
+                // Tracks that left the device since the last full walk.
+                result.heldTrackIds?.let { store.prune(it) }
                 syncProvenanceFingerprints(api, store)
                 pushPendingProvenance(api, store)
             } catch (ignored: Exception) { /* best-effort — try again next sync */ }
         }
 
-        val currentLocale = AppLanguage.locale(applicationContext)
-        val timestamp = SimpleDateFormat("dd/MM HH:mm", currentLocale).format(Date())
-        Prefs.recordSyncResult(applicationContext, timestamp, result.error)
+        Prefs.recordSyncResult(applicationContext, System.currentTimeMillis(), result.error, result.failed, result.failures)
+        // A sync with no error counts toward the thank-you card on Home, and is
+        // reported to the server, which counts every device for its own card.
+        // Best-effort: an older server's 404, or a dropped connection, never
+        // fails a sync that already succeeded.
+        if (result.error == null) {
+            Prefs.countSuccessfulSync(applicationContext)
+            try {
+                api.reportSyncCompleted()
+            } catch (ignored: Exception) { /* older server, or offline */ }
+        }
         NotificationManagerCompat.from(applicationContext).cancel(NOTIFICATION_ID)
 
         val output = workDataOf(
             KEY_DOWNLOADED to result.downloaded, KEY_DELETED to result.deleted,
             KEY_FAILED to result.failed, KEY_ERROR to result.error,
         )
-        when {
-            result.error == null -> Result.success(output)
-            isManual -> Result.failure(output) // surface immediately, no silent background retry
-            else -> Result.retry()
+        when (outcome(result, isManual)) {
+            Outcome.SUCCESS -> Result.success(output)
+            Outcome.FAILURE -> Result.failure(output)
+            Outcome.RETRY -> Result.retry()
         }
     }
 
     companion object {
+        enum class Outcome { SUCCESS, FAILURE, RETRY }
+
+        /** What a finished run tells WorkManager. */
+        internal fun outcome(result: SyncResult, isManual: Boolean): Outcome = when {
+            result.error == null -> Outcome.SUCCESS
+            isManual -> Outcome.FAILURE // surface immediately, no silent background retry
+            // Retrying a refused token only repeats the refusal: stop until
+            // the user re-enrolls (which cancels this work, see unpair()).
+            result.unauthorized -> Outcome.FAILURE
+            else -> Outcome.RETRY
+        }
+
         const val PERIODIC_WORK_NAME = "trobar-periodic"
+        const val RETRY_BACKOFF_MINUTES = 15L
         private const val PERIODIC_INTERVAL_HOURS = 6L
         const val MANUAL_WORK_NAME = "trobar-manual"
         const val KEY_IS_MANUAL = "is_manual"
         const val KEY_DONE = "done"
         const val KEY_TOTAL = "total"
         const val KEY_SCANNING = "scanning"
+        const val KEY_PLAN_TRACKS = "plan_tracks"
+        const val KEY_PLAN_BYTES = "plan_bytes"
+        const val KEY_PLAN_FREE = "plan_free"
         const val KEY_DOWNLOADED = "downloaded"
         const val KEY_DELETED = "deleted"
         const val KEY_FAILED = "failed"
         const val KEY_ERROR = "error"
 
+        private const val PROGRESS_MIN_INTERVAL_MS = 1_000L
         private const val NOTIFICATION_CHANNEL_ID = "sync_progress"
         private const val NOTIFICATION_ID = 1001
 
@@ -157,7 +203,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         /** The progress notification. Its text is in the app's language: on
          * API 26-32 the worker's application context does not carry the
          * in-app choice, so the strings come from AppLanguage.wrap(context). */
-        internal fun buildNotification(context: Context, done: Int, total: Int, scanning: Boolean): Notification {
+        internal fun buildNotification(context: Context, done: Int, total: Int, scanning: Boolean, plan: SyncPlan? = null): Notification {
             val texts = AppLanguage.wrap(context)
             ensureNotificationChannel(context)
             val builder = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
@@ -170,6 +216,8 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             when {
                 scanning -> builder.setContentText(texts.getString(R.string.recovery_scanning))
                     .setProgress(0, 0, true)
+                // Until the first track is in, what the run will do; then how far it is.
+                plan != null && done == 0 -> builder.setContentText(syncPlanText(texts, plan)).setProgress(total, 0, false)
                 total > 0 -> builder.setContentText(texts.getString(R.string.notification_sync_progress, done, total))
                     .setProgress(total, done, false)
                 else -> builder.setContentText(texts.getString(R.string.sync_in_progress))
@@ -178,9 +226,9 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             return builder.build()
         }
 
-        private fun buildForegroundInfo(context: Context, done: Int, total: Int, scanning: Boolean = false): ForegroundInfo =
+        private fun buildForegroundInfo(context: Context, done: Int, total: Int, scanning: Boolean = false, plan: SyncPlan? = null): ForegroundInfo =
             ForegroundInfo(
-                NOTIFICATION_ID, buildNotification(context, done, total, scanning),
+                NOTIFICATION_ID, buildNotification(context, done, total, scanning, plan),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
             )
 
@@ -210,10 +258,32 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
                 .build()
             val request = PeriodicWorkRequestBuilder<SyncWorker>(PERIODIC_INTERVAL_HOURS, TimeUnit.HOURS)
                 .setConstraints(constraints)
+                .apply {
+                    // A failed background sync (server down, say) is tried
+                    // again after 15 minutes, then 30, 60…, not WorkManager's
+                    // default 30 seconds; the next periodic run comes
+                    // regardless. Not on an idle-mode job: WorkManager refuses
+                    // backoff criteria there (it retries those when the
+                    // device is next idle).
+                    if (!requireChargingAndIdle) {
+                        setBackoffCriteria(BackoffPolicy.EXPONENTIAL, RETRY_BACKOFF_MINUTES, TimeUnit.MINUTES)
+                    }
+                }
                 .build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 PERIODIC_WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request,
             )
+        }
+
+        /** Unpair (or re-enroll): forget the pairing, and stop the scheduled
+         * and any pending manual sync with it, so nothing keeps firing into
+         * a refused token or a server this phone has left. */
+        suspend fun unpair(context: Context) {
+            val work = WorkManager.getInstance(context)
+            work.cancelUniqueWork(PERIODIC_WORK_NAME)
+            work.cancelUniqueWork(MANUAL_WORK_NAME)
+            Prefs.clearPairing(context)
+            LibraryCache.clear(context)
         }
 
         /** User explicitly tapped "sync now" — still respects the same
@@ -245,3 +315,43 @@ fun Data.toSyncResult(): WorkSyncResult = WorkSyncResult(
     failed = getInt(SyncWorker.KEY_FAILED, 0),
     error = getString(SyncWorker.KEY_ERROR),
 )
+
+/** Promotes the sync to a foreground service, unless Android refuses it.
+ * From API 31 a job started from a restricted standby bucket may not start
+ * one (ForegroundServiceStartNotAllowedException, an IllegalStateException).
+ * The sync then carries on un-promoted, and isn't asked again: a throw out of
+ * doWork() would fail the run without recording its result. */
+internal class ForegroundPromoter(private val setForeground: suspend (ForegroundInfo) -> Unit) {
+    @Volatile var refused = false
+        private set
+
+    suspend fun promote(info: ForegroundInfo) {
+        if (refused) return
+        try {
+            setForeground(info)
+        } catch (e: IllegalStateException) {
+            Log.w("SyncWorker", "foreground promotion refused; syncing un-promoted", e)
+            refused = true
+        }
+    }
+}
+
+/** Whether a progress update is worth posting: at most one per interval,
+ * except the first, a switch between scanning and downloading, and the last
+ * track, which always go through. Called from parallel downloads. */
+internal class ProgressThrottle(private val minIntervalMs: Long) {
+    private var lastAt: Long? = null
+    private var lastScanning: Boolean? = null
+
+    @Synchronized
+    fun due(done: Int, total: Int, scanning: Boolean, nowMs: Long): Boolean {
+        val last = lastAt
+        val due = last == null || scanning != lastScanning || (total > 0 && done >= total) ||
+            nowMs - last >= minIntervalMs
+        if (due) {
+            lastAt = nowMs
+            lastScanning = scanning
+        }
+        return due
+    }
+}

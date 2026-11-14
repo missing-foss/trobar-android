@@ -43,6 +43,18 @@ import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.KeyboardCapitalization
 
 /** #34/#162: enrollment wizard — the app's pairing flow. Scan the QR the web
  * UI shows (`{server_url, enroll_code}`), read it from an image (a
@@ -57,7 +69,7 @@ fun EnrollmentWizard(onEnrolled: (String, String) -> Unit, initialServerUrl: Str
     // #101: re-pairing after a credentials-unreadable failure offers the
     // still-known server URL back, so it's one QR/code away rather than a
     // fully blank form — the URL itself was never the part that failed.
-    var serverUrl by remember { mutableStateOf(initialServerUrl) }
+    var serverUrl by remember { mutableStateOf(initialServerUrl.ifBlank { "https://" }) }
     var code by remember { mutableStateOf("") }
     var showDetails by remember { mutableStateOf(false) }
     var enrolling by remember { mutableStateOf(false) }
@@ -138,15 +150,15 @@ fun EnrollmentWizard(onEnrolled: (String, String) -> Unit, initialServerUrl: Str
                             ScanOptions().setOrientationLocked(false).setPrompt(context.getString(R.string.scan_qr_prompt)),
                         )
                     },
-                    onImportImage = {
-                        qrMessage = null
-                        imageLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    },
                     message = qrMessage,
                 )
                 ConnectStep(
                     serverUrl = serverUrl, onServerUrl = { serverUrl = it },
-                    code = code, onCode = { code = it.trim().uppercase() },
+                    code = code, onCode = { code = enrollCodeOf(it) },
+                    onImportImage = {
+                        qrMessage = null
+                        imageLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    },
                     onContinue = { error = null; showDetails = true },
                 )
             } else {
@@ -163,13 +175,9 @@ fun EnrollmentWizard(onEnrolled: (String, String) -> Unit, initialServerUrl: Str
 /** Step 1, the QR routes: the camera, or a QR in an image. [message] says
  * why the last QR read did not pair. */
 @Composable
-private fun QrButtons(onScan: () -> Unit, onImportImage: () -> Unit, message: String?) {
-    // Stacked, full width: neither label ever shares its row with the other.
+private fun QrButtons(onScan: () -> Unit, message: String?) {
     Button(onClick = onScan, modifier = Modifier.fillMaxWidth()) {
         Text(stringResource(R.string.scan_qr_button))
-    }
-    OutlinedButton(onClick = onImportImage, modifier = Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.import_qr_image_button))
     }
     message?.let {
         Text(
@@ -189,8 +197,10 @@ private fun ColumnScope.ConnectStep(
     onServerUrl: (String) -> Unit,
     code: String,
     onCode: (String) -> Unit,
+    onImportImage: () -> Unit,
     onContinue: () -> Unit,
 ) {
+    val clipboard = LocalClipboardManager.current
     Text(
         stringResource(R.string.enroll_or_manual),
         style = MaterialTheme.typography.labelMedium,
@@ -201,16 +211,53 @@ private fun ColumnScope.ConnectStep(
         label = { Text(stringResource(R.string.server_url_label)) },
         modifier = Modifier.fillMaxWidth(),
     )
-    OutlinedTextField(
-        value = code, onValueChange = onCode, singleLine = true,
-        label = { Text(stringResource(R.string.enroll_code_label)) },
-        modifier = Modifier.fillMaxWidth(),
-    )
+    EnrollCodeBoxes(code, onCode)
+    // Stacked, full width: neither label ever shares its row with the other.
+    OutlinedButton(
+        onClick = { clipboard.getText()?.let { onCode(it.text) } },
+        modifier = Modifier.fillMaxWidth().testTag("enroll_paste"),
+    ) { Text(stringResource(R.string.enroll_paste)) }
+    OutlinedButton(onClick = onImportImage, modifier = Modifier.fillMaxWidth()) {
+        Text(stringResource(R.string.import_qr_image_button))
+    }
     Button(
         onClick = onContinue,
-        enabled = serverUrl.isNotBlank() && code.isNotBlank(),
+        enabled = isServerUrl(serverUrl) && code.length == ENROLL_CODE_LENGTH,
         modifier = Modifier.fillMaxWidth(),
     ) { Text(stringResource(R.string.enroll_continue)) }
+}
+
+/** The code the server hands out: upper case, letters and digits only, and
+ * what's over the length dropped, so a paste with spaces or a line end works. */
+internal fun enrollCodeOf(text: String): String =
+    text.uppercase().filter { it in 'A'..'Z' || it in '0'..'9' }.take(ENROLL_CODE_LENGTH)
+
+/** One field, drawn as a box per character. */
+@Composable
+private fun EnrollCodeBoxes(code: String, onCode: (String) -> Unit) {
+    val label = stringResource(R.string.enroll_code_label)
+    Text(label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.fillMaxWidth())
+    BasicTextField(
+        value = code, onValueChange = onCode, singleLine = true,
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, autoCorrectEnabled = false),
+        cursorBrush = SolidColor(Color.Transparent),
+        modifier = Modifier.fillMaxWidth().testTag("enroll_code").semantics { contentDescription = label },
+        decorationBox = { field ->
+            Box {
+                Row(horizontalArrangement = Arrangement.spacedBy(CODE_BOX_GAP)) {
+                    repeat(ENROLL_CODE_LENGTH) { i ->
+                        Box(
+                            Modifier.weight(1f).heightIn(min = CODE_BOX_HEIGHT)
+                                .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small),
+                            contentAlignment = Alignment.Center,
+                        ) { Text(code.getOrNull(i)?.toString().orEmpty(), style = MaterialTheme.typography.titleMedium) }
+                    }
+                }
+                // The real field, unseen: it holds the cursor and the keyboard.
+                Box(Modifier.matchParentSize().alpha(0f)) { field() }
+            }
+        },
+    )
 }
 
 /** Step 2: device settings sent to the server on redemption (name required),
@@ -272,3 +319,7 @@ private fun ColumnScope.DetailsStep(
         onClick = onBack, enabled = !enrolling, modifier = Modifier.fillMaxWidth(),
     ) { Text(stringResource(R.string.enroll_back)) }
 }
+
+private const val ENROLL_CODE_LENGTH = 8
+private val CODE_BOX_HEIGHT = 44.dp
+private val CODE_BOX_GAP = 4.dp

@@ -6,6 +6,8 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.annotation.StringRes
+import androidx.compose.runtime.staticCompositionLocalOf
+import kotlinx.coroutines.flow.first
 
 /** Why a manual sync started now would wait rather than run, under the
  * user's own network setting -- or null when it would run. The answer
@@ -37,3 +39,14 @@ object SyncConditions {
         else -> null
     }
 }
+
+/** How the app starts a manual sync of this phone after a send, and asks
+ * what would hold it back: the real ones, which a test replaces through
+ * [LocalManualSync] so that a send starts no worker and the held-back case
+ * needs no network of its own. */
+class ManualSync(
+    val start: suspend (Context) -> Unit = { SyncWorker.triggerManualSync(it) },
+    val blockedBy: suspend (Context) -> Int? = { SyncConditions.blockingReason(it, Prefs.networkMode(it).first()) },
+)
+
+internal val LocalManualSync = staticCompositionLocalOf { ManualSync() }

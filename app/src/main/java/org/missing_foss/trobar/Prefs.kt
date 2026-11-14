@@ -10,7 +10,14 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.text.DateFormat
+import java.util.Date
+import java.util.Locale
+import org.json.JSONArray
+import org.json.JSONException
+import org.json.JSONObject
 
 // Internal (not private) so PrefsTest can seed/inspect raw preference state
 // (e.g. a legacy plaintext token) to exercise migrateTokenIfNeeded() directly.
@@ -26,9 +33,22 @@ object Prefs {
     private val TOKEN = stringPreferencesKey("token")
     private val TREE_URI = stringPreferencesKey("tree_uri")
     private val RECOVERY_PENDING = booleanPreferencesKey("recovery_pending")
-    private val LAST_SYNC_AT = stringPreferencesKey("last_sync_at")
+    // Older versions stored the last sync preformatted ("dd/MM HH:mm", no
+    // year); it's shown as is until the next sync replaces it.
+    private val LAST_SYNC_AT_LEGACY = stringPreferencesKey("last_sync_at")
+    private val LAST_SYNC_AT_MS = longPreferencesKey("last_sync_at_ms")
     private val LAST_SYNC_ERROR = stringPreferencesKey("last_sync_error")
+    private val LAST_SYNC_FAILED = intPreferencesKey("last_sync_failed")
+    private val LAST_SYNC_FAILURES = stringPreferencesKey("last_sync_failures")
+    // The one-time thank-you card on Home: syncs this install finished with
+    // no error, and whether either of the card's buttons was pressed.
+    private val SUCCESSFUL_SYNCS = intPreferencesKey("successful_syncs")
+    private val THANKS_CARD_DONE = booleanPreferencesKey("thanks_card_done")
+    // Whether the app has asked for the notification permission. It asks
+    // once, after the folder picker; Settings is the way back after that.
+    private val NOTIFICATION_PROMPT_DONE = booleanPreferencesKey("notification_prompt_done")
     private val NETWORK_MODE = stringPreferencesKey("network_mode")
+    private val PLAYLIST_SORT = stringPreferencesKey("playlist_sort")
     private val REQUIRE_CHARGING_AND_IDLE = booleanPreferencesKey("require_charging_and_idle")
     private val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
     private val APP_MODE = stringPreferencesKey("app_mode")
@@ -177,16 +197,52 @@ object Prefs {
         context.dataStore.edit { it[RECOVERY_PENDING] = pending }
     }
 
+    /** When the last sync finished, in the app's language, or null if none
+     * has. Stored as epoch millis and formatted here, when it's read. */
     fun lastSyncAt(context: Context): Flow<String?> =
-        context.dataStore.data.map { it[LAST_SYNC_AT] }
+        context.dataStore.data.map { prefs ->
+            prefs[LAST_SYNC_AT_MS]?.let { formatSyncTime(it, AppLanguage.locale(context)) } ?: prefs[LAST_SYNC_AT_LEGACY]
+        }
+
+    fun formatSyncTime(epochMillis: Long, locale: Locale): String =
+        DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, locale).format(Date(epochMillis))
 
     fun lastSyncError(context: Context): Flow<String?> =
         context.dataStore.data.map { it[LAST_SYNC_ERROR] }
 
-    suspend fun recordSyncResult(context: Context, at: String, error: String?) {
+    suspend fun recordSyncResult(
+        context: Context, atEpochMillis: Long, error: String?, failed: Int = 0, failures: List<SyncFailure> = emptyList(),
+    ) {
         context.dataStore.edit {
-            it[LAST_SYNC_AT] = at
+            it[LAST_SYNC_AT_MS] = atEpochMillis
+            it.remove(LAST_SYNC_AT_LEGACY)
             if (error != null) it[LAST_SYNC_ERROR] = error else it.remove(LAST_SYNC_ERROR)
+            it[LAST_SYNC_FAILED] = failed
+            if (failures.isEmpty()) it.remove(LAST_SYNC_FAILURES) else it[LAST_SYNC_FAILURES] = failuresJson(failures)
+        }
+    }
+
+    /** When the last sync ended, for showing how long ago. */
+    fun lastSyncAtMillis(context: Context): Flow<Long?> = context.dataStore.data.map { it[LAST_SYNC_AT_MS] }
+
+    /** How many tracks the last sync failed on, all of them. */
+    fun lastSyncFailed(context: Context): Flow<Int> = context.dataStore.data.map { it[LAST_SYNC_FAILED] ?: 0 }
+
+    /** The last sync's failures, as far as they were kept. */
+    fun lastSyncFailures(context: Context): Flow<List<SyncFailure>> =
+        context.dataStore.data.map { parseFailures(it[LAST_SYNC_FAILURES]) }
+
+    private fun failuresJson(failures: List<SyncFailure>) = JSONArray(
+        failures.map { JSONObject().put("path", it.path).put("reason", it.reason) },
+    ).toString()
+
+    private fun parseFailures(json: String?): List<SyncFailure> {
+        if (json == null) return emptyList()
+        return try {
+            val arr = JSONArray(json)
+            List(arr.length()) { arr.getJSONObject(it).let { o -> SyncFailure(o.getString("path"), o.getString("reason")) } }
+        } catch (ignored: JSONException) {
+            emptyList()
         }
     }
 
@@ -194,7 +250,46 @@ object Prefs {
      * clean sync already clears it, but a recurring failure would otherwise
      * pin the message to the status screen with no way to acknowledge it. */
     suspend fun clearSyncError(context: Context) {
-        context.dataStore.edit { it.remove(LAST_SYNC_ERROR) }
+        context.dataStore.edit {
+            it.remove(LAST_SYNC_ERROR)
+            it.remove(LAST_SYNC_FAILURES)
+            it.remove(LAST_SYNC_FAILED)
+        }
+    }
+
+    /** Successful syncs on this install before Home shows the thank-you card. */
+    const val THANKS_CARD_SYNCS = 50
+
+    fun successfulSyncs(context: Context): Flow<Int> =
+        context.dataStore.data.map { it[SUCCESSFUL_SYNCS] ?: 0 }
+
+    suspend fun countSuccessfulSync(context: Context) {
+        context.dataStore.edit { it[SUCCESSFUL_SYNCS] = (it[SUCCESSFUL_SYNCS] ?: 0) + 1 }
+    }
+
+    /** Whether Home shows the thank-you card: from the 50th successful sync
+     * on, until either of its buttons is pressed. */
+    fun thanksCardShown(context: Context): Flow<Boolean> = context.dataStore.data.map {
+        it[THANKS_CARD_DONE] != true && (it[SUCCESSFUL_SYNCS] ?: 0) >= THANKS_CARD_SYNCS
+    }
+
+    suspend fun setThanksCardDone(context: Context) {
+        context.dataStore.edit { it[THANKS_CARD_DONE] = true }
+    }
+
+    suspend fun notificationPromptDone(context: Context): Boolean =
+        context.dataStore.data.first()[NOTIFICATION_PROMPT_DONE] == true
+
+    suspend fun setNotificationPromptDone(context: Context) {
+        context.dataStore.edit { it[NOTIFICATION_PROMPT_DONE] = true }
+    }
+
+    /** Both thank-you card keys gone, as on a fresh install: for tests. */
+    suspend fun resetThanksCard(context: Context) {
+        context.dataStore.edit {
+            it.remove(SUCCESSFUL_SYNCS)
+            it.remove(THANKS_CARD_DONE)
+        }
     }
 
     fun networkMode(context: Context): Flow<String> =
@@ -202,6 +297,13 @@ object Prefs {
 
     suspend fun setNetworkMode(context: Context, mode: String) {
         context.dataStore.edit { it[NETWORK_MODE] = mode }
+    }
+
+    /** The Playlists tab's order, as a PlaylistSort name; null until one is chosen. */
+    fun playlistSort(context: Context): Flow<String?> = context.dataStore.data.map { it[PLAYLIST_SORT] }
+
+    suspend fun setPlaylistSort(context: Context, sort: String) {
+        context.dataStore.edit { it[PLAYLIST_SORT] = sort }
     }
 
     /** #93: opt-in WorkManager constraints on the PERIODIC sync only —

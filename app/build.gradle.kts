@@ -12,6 +12,17 @@ plugins {
     id("io.gitlab.arturbosch.detekt")
 }
 
+// Every dependency the build resolves, transitive ones included, is pinned in
+// gradle.lockfile: a build that would resolve anything else fails instead of
+// quietly picking it up. After changing a dependency, rewrite the lockfiles
+// with `./gradlew :app:dependencies :freedroidwarn:dependencies
+// buildEnvironment --write-locks` and commit them with the change. Renovate's
+// pull requests need the same, which works only if its runner can build the
+// app.
+dependencyLocking {
+    lockAllConfigurations()
+}
+
 android {
     namespace = "org.missing_foss.trobar"
     compileSdk = 37
@@ -23,8 +34,8 @@ android {
         applicationId = "org.missing_foss.trobar"
         minSdk = 26
         targetSdk = 34
-        versionCode = 50
-        versionName = "2.15.0"
+        versionCode = 51
+        versionName = "2.16.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" // #61
     }
 
@@ -64,8 +75,19 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
+            // R8 shrinks and obfuscates the release build. The libraries need
+            // no keep rules of their own: see proguard-rules.pro for what was
+            // checked. Resource shrinking stays off: launcher icons and themes
+            // are looked up by name at run time.
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Signed only when TROBAR_KEYSTORE is set, as the release builds
+            // that ship are. Without it the release build is unsigned, as an
+            // F-Droid build needs, and AGP names it app-release-unsigned.apk;
+            // the warning below says so on every release build without it.
+            if (System.getenv("TROBAR_KEYSTORE") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
@@ -75,6 +97,15 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    // AGP otherwise adds a block of dependency metadata to the APK's signing
+    // block, encrypted for Google Play with fresh randomness each time, so no
+    // two builds of the same source are byte-identical. Only Google Play
+    // reads it, and Trobar is not on Google Play; a reproducible build, which
+    // F-Droid needs to ship the APK signed with our own key, needs it gone.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
     lint {
         // #52: EN/FR string parity is a build gate. A new string with no FR
@@ -96,12 +127,12 @@ detekt {
 }
 
 dependencies {
-    implementation("androidx.appcompat:appcompat:1.7.1")
-    implementation("androidx.core:core-ktx:1.19.0")
+    implementation("androidx.appcompat:appcompat:1.8.0")
+    implementation("androidx.core:core-ktx:1.19.1")
     implementation("androidx.activity:activity-compose:1.13.0")
     // The three-tab shell and its pushed destinations; replaces an eight-way
     // `when` over booleans that had no back stack. Exact pin, Google Maven.
-    implementation("androidx.navigation:navigation-compose:2.10.1")
+    implementation("androidx.navigation:navigation-compose:2.10.2")
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
@@ -127,9 +158,9 @@ dependencies {
     // version so a transitive bump cannot split them.
     implementation("com.patrykandpatrick.vico:compose:3.3.1")
     implementation("com.patrykandpatrick.vico:compose-m3:3.3.1")
-    implementation("androidx.work:work-runtime-ktx:2.11.2")
-    implementation("androidx.datastore:datastore-preferences:1.2.1")
-    implementation("com.squareup.okhttp3:okhttp:5.4.0")
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
+    implementation("androidx.datastore:datastore-preferences:1.3.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.1")
     // Covers and artist pictures in the library and Home screens. Coil 3 on
     // its OkHttp fetcher, so images ride the app's one shared client (and its
     // credential interceptor) rather than a second HTTP stack; cache-control
@@ -144,8 +175,8 @@ dependencies {
         // test classpath to the app's versions, so the two must agree. Coil's
         // arrival (its profileinstaller asks for the same module) is what
         // first made the disagreement fatal. Meet at 1.2.0 in the app.
-        implementation("androidx.concurrent:concurrent-futures:1.2.0")
-        implementation("androidx.concurrent:concurrent-futures-ktx:1.2.0")
+        implementation("androidx.concurrent:concurrent-futures:1.3.0")
+        implementation("androidx.concurrent:concurrent-futures-ktx:1.3.0")
     }
     // org.json is part of the Android platform (bootclasspath, since API 1), so
     // JSONObject/JSONArray resolve without an explicit dependency. We deliberately
@@ -156,13 +187,10 @@ dependencies {
     implementation("androidx.documentfile:documentfile:1.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     // #21: warns sideloading users that Google's developer-verification
-    // requirement will stop this app working on certified devices. Pinned to an
-    // exact tag, NOT upstream's suggested `V1.+` — a floating coordinate from a
-    // build-on-demand repository decides at build time what ends up in a signed
-    // release. Resolves only from the narrowed JitPack entry in
-    // settings.gradle.kts. Its own appcompat floor is 1.5.1, below the 1.7.1
-    // above, so it adds no constraint of its own.
-    implementation("com.github.woheller69:FreeDroidWarn:V1.14")
+    // requirement will stop this app working on certified devices. Vendored from
+    // upstream's V1.14 tag as the :freedroidwarn module (freedroidwarn/UPSTREAM.md),
+    // so the build takes nothing from JitPack.
+    implementation(project(":freedroidwarn"))
 
     // #61: instrumented Compose UI tests — ./gradlew connectedAndroidTest (needs
     // a device/emulator). ui-test-manifest lets the harness host composables.
@@ -174,5 +202,26 @@ dependencies {
     // server standing in for trobar-server, so EnrollmentWizard/SettingsScreen/
     // StatusScreen's actual ApiClient/redeemEnrollment network calls hit
     // something real rather than needing a mocking seam neither has today.
-    androidTestImplementation("com.squareup.okhttp3:mockwebserver:5.4.0")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:5.5.1")
+
+    // #169: plain JVM unit tests, ./gradlew testDebugUnitTest -- no device, so
+    // both CI copies run them on every change. The version is the one the
+    // instrumented tests already resolve through androidx.test.ext:junit.
+    testImplementation("junit:junit:4.13.2")
+}
+
+// A release build without TROBAR_KEYSTORE is unsigned (see buildTypes): say so
+// loudly, naming the missing variable, whenever a release package is built.
+// Not on debug or test builds, which never sign with it.
+gradle.taskGraph.whenReady {
+    val packagesARelease = allTasks.any { task ->
+        task.project == project && task.name.contains("Release") &&
+            (task.name.startsWith("assemble") || task.name.startsWith("bundle") || task.name.startsWith("package"))
+    }
+    if (packagesARelease && System.getenv("TROBAR_KEYSTORE") == null) {
+        logger.warn(
+            "WARNING: TROBAR_KEYSTORE is not set, so this release build is UNSIGNED " +
+                "(app-release-unsigned.apk). A signed release needs TROBAR_KEYSTORE and its password variables."
+        )
+    }
 }

@@ -15,6 +15,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -32,6 +36,7 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -45,6 +50,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 
 private class Tab(val route: String, val name: Int, val icon: ImageVector)
 
@@ -91,8 +98,13 @@ fun AppShell(
     val probe = rememberServerProbe(pairing)
     val syncStatus = rememberSyncStatus()
     val tabDrillDown = remember { TabDrillDown() }
+    val manualSync = LocalManualSync.current
+    // The shell's own messages: those that outlive the screen that had them,
+    // such as a send's outcome once the basket has gone back.
+    val snackbar = remember { SnackbarHostState() }
     CompositionLocalProvider(LocalTabDrillDown provides tabDrillDown) {
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             if (route in Routes.TABS) Column {
                 SyncIndicator(syncStatus, probe.state, onOpen = { nav.switchTab(Routes.SETTINGS) })
@@ -129,17 +141,26 @@ fun AppShell(
                 }
             }
             playlistRoutes(pairing, nav, shared)
-            composable(Routes.BASKET) {
-                BasketScreen(
-                    pairing = pairing,
-                    onBack = { nav.popBackStack() },
-                    onSyncNow = { scope.launch { SyncWorker.triggerManualSync(context) } },
-                    onShowSync = { nav.switchTab(Routes.SETTINGS) },
-                    shared = shared,
-                )
+            // The shell's scope for both: the basket's ends as it goes back.
+            basketRoute(pairing, nav, shared, onSyncNow = { scope.launch { manualSync.start(context) } }) { message, offerShowSync ->
+                val show = context.getString(R.string.basket_show_sync).takeIf { offerShowSync }
+                scope.launch { snackbar.sayAfterSend(message, show) { nav.switchTab(Routes.SETTINGS) } }
             }
             composable(Routes.SETTINGS) {
                 SettingsTab(pairing, treeUri, probe, syncStatus, nav, HostActions(onServerUrlChanged, onFolderChanged, onUnpair, onReEnroll))
+            }
+            composable(
+                Routes.SELECTIONS,
+                arguments = listOf(navArgument(Routes.SELECTIONS_DEVICE) { type = NavType.LongType }),
+            ) { entry ->
+                AppApiGate(pairing, minLevel = APP_API_SELECTIONS) {
+                    SelectionsScreen(
+                        pairing = pairing,
+                        deviceId = entry.arguments?.getLong(Routes.SELECTIONS_DEVICE) ?: return@AppApiGate,
+                        onBack = { nav.popBackStack() },
+                        onRemoved = shared::selectionsChanged,
+                    )
+                }
             }
             composable(Routes.WIDGET_PREFS) {
                 WidgetPrefsScreen(pairing = pairing, shared = shared, onBack = { nav.popBackStack() })
@@ -149,6 +170,39 @@ fun AppShell(
             }
         }
     }
+    }
+}
+
+/** A send's message on the shell's snackbar; [showSync], when offered, is
+ * the action that leads to the sync. */
+private suspend fun SnackbarHostState.sayAfterSend(message: String, showSyncLabel: String?, showSync: () -> Unit) {
+    val choice = showSnackbar(message, actionLabel = showSyncLabel, duration = SnackbarDuration.Long)
+    // On the main thread: the snackbar can resume on the one that tapped it.
+    if (choice == SnackbarResult.ActionPerformed) withContext(Dispatchers.Main.immediate) { showSync() }
+}
+
+/** The basket, pushed over a tab. A send that empties it goes back to that
+ * tab, and [say] puts its message there, on the shell's own snackbar: the
+ * basket's goes with the basket. */
+private fun NavGraphBuilder.basketRoute(
+    pairing: Prefs.Pairing,
+    nav: NavHostController,
+    shared: AppState,
+    onSyncNow: () -> Unit,
+    say: (message: String, offerShowSync: Boolean) -> Unit,
+) {
+    composable(Routes.BASKET) {
+        BasketScreen(
+            pairing = pairing,
+            onBack = { nav.popBackStack() },
+            onSyncNow = onSyncNow,
+            onShowSync = { nav.switchTab(Routes.SETTINGS) },
+            shared = shared,
+            onSentAll = { message, offerShowSync ->
+                if (nav.currentBackStackEntry?.destination?.route == Routes.BASKET) nav.popBackStack()
+                say(message, offerShowSync)
+            },
+        )
     }
 }
 
@@ -162,6 +216,7 @@ private fun NavGraphBuilder.playlistRoutes(pairing: Prefs.Pairing, nav: NavHostC
                 nav = PlaylistsNav(
                     onOpenBasket = { nav.navigate(Routes.BASKET) },
                     onOpenSubscriptions = { nav.navigate(Routes.subscriptions()) },
+                    onOpenLibrary = { nav.switchTab(Routes.LIBRARY) },
                 ),
                 shared = shared,
             )
@@ -216,8 +271,8 @@ internal class HostActions(
 )
 
 /** Settings as a tab: the sync's detail on top. Opening it re-probes the
- * server, as opening the Sync tab did; a failed probe shows the repair
- * screen in its place. In Simple mode it is pushed over the Sync screen
+ * server, as opening the Sync tab did; a failed probe puts the repair
+ * card on top, and the rest stays reachable. In Simple mode it is pushed over the Sync screen
  * instead: [onBack] returns there, and [syncStatus] is null since the card is
  * the screen underneath. */
 @Composable
@@ -233,31 +288,41 @@ internal fun SettingsTab(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { probe.retry() }
-    if (probe.state != ConnState.OK) {
-        ConnectionProblemScreen(
-            unauthorized = probe.state == ConnState.UNAUTHORIZED,
-            serverUrl = pairing.serverUrl,
-            onRetry = probe::retry,
-            onReEnroll = host.onReEnroll,
-            // The retry follows the write, not the call: the new address is
-            // stored asynchronously, and a probe started before it lands
-            // would still ask the old one.
-            onServerUrlChanged = { url ->
-                scope.launch {
-                    Prefs.setServerUrl(context, url)
-                    probe.retry()
-                }
-            },
-        )
-    } else {
+    // Read again once the server is back: what's shown from it was empty until then.
+    key(probe.state == ConnState.OK) {
         SettingsScreen(
             pairing = pairing,
             treeUri = treeUri,
-            nav = SettingsNav(onOpenAbout = { nav.navigate(Routes.ABOUT) }, onBack = onBack),
+            nav = SettingsNav(
+                onOpenAbout = { nav.navigate(Routes.ABOUT) },
+                onBack = onBack,
+                problem = {
+                    if (probe.state != ConnState.OK) {
+                        ConnectionProblemCard(
+                            unauthorized = probe.state == ConnState.UNAUTHORIZED,
+                            serverUrl = pairing.serverUrl,
+                            onRetry = probe::retry,
+                            onReEnroll = host.onReEnroll,
+                            // The retry follows the write, not the call: the new address is
+                            // stored asynchronously, and a probe started before it lands
+                            // would still ask the old one.
+                            onServerUrlChanged = { url ->
+                                scope.launch {
+                                    Prefs.setServerUrl(context, url)
+                                    probe.retry()
+                                }
+                            },
+                        )
+                    }
+                },
+            ),
             onServerUrlChanged = host.onServerUrlChanged,
             onFolderChanged = host.onFolderChanged,
             onUnpair = host.onUnpair,
-            syncStatus = { syncStatus?.let { SyncStatusCard(pairing, it) } },
+            // While the server answers, the bottom indicator shows a run's state and
+            // progress and the card doesn't repeat them. When it doesn't, the
+            // indicator says so instead, and the card is the only place left for them.
+            syncStatus = { syncStatus?.let { SyncStatusCard(pairing, it, live = settingsCardIsLive(probe.state)) } },
         )
     }
 }
@@ -270,6 +335,8 @@ private fun HomeTab(pairing: Prefs.Pairing, nav: NavHostController, shared: AppS
             onOpenBasket = { nav.navigate(Routes.BASKET) },
             onOpenPrefs = { nav.navigate(Routes.WIDGET_PREFS) },
             onOpenLibrary = { nav.switchTab(Routes.LIBRARY) },
+            onOpenDevice = { nav.navigate(Routes.selections(it)) },
+            onOpenPlaylists = { nav.switchTab(Routes.PLAYLISTS) },
         ),
         shared = shared,
         basketCount = basketCount,

@@ -4,8 +4,8 @@
 // other in precedence order, a hidden widget giving its albums back to
 // the ones below, a months change refetching only its own widget, the
 // suggestions hint from the server's signal, a double-tap staging an
-// album for the header's device with its cover flying (a single tap doing
-// nothing), a full grid showing its last row whole at a phone width,
+// album for the header's device with its cover flying (a single tap opening
+// it in the Library), a full grid showing its last row whole at a phone width,
 // a large font scale and a tablet width, and the months stepper in the
 // card's title row leaving "View library" a line of its own.
 
@@ -29,8 +29,11 @@ import androidx.compose.ui.unit.width
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
@@ -66,6 +69,8 @@ class DiscoveryWidgetsTest {
     private lateinit var api: FakeDashboardApi
     private lateinit var basket: FakeAppApi
     private lateinit var vm: HomeViewModel
+    private lateinit var shared: AppState
+    private var libraryOpens = 0
 
     @Before
     fun startServer() {
@@ -86,14 +91,21 @@ class DiscoveryWidgetsTest {
         server.shutdown()
     }
 
-    private fun setScreen(fontScale: Float? = null, tablet: Boolean = false, widthDp: Int? = null, french: Boolean = false) {
+    private fun setScreen(
+        fontScale: Float? = null,
+        tablet: Boolean = false,
+        widthDp: Int? = null,
+        french: Boolean = false,
+        appApiLevel: Int = 0,
+    ) {
         val pairing = Prefs.Pairing(serverUrl = server.url("/").toString(), token = "test-token")
-        val shared = testAppState(context, pairing)
+        shared = testAppState(context, pairing)
         vm = HomeViewModel(
             AppApiDashboardClient(context, pairing.serverUrl, pairing.token),
             AppApiClient(context, pairing.serverUrl, pairing.token),
             WidgetRegistry.all,
             shared,
+            appApiLevel = { appApiLevel },
         )
         compose.setContent {
             val density = LocalDensity.current
@@ -109,7 +121,7 @@ class DiscoveryWidgetsTest {
                     // A tablet's window, wider than this device's screen; Home caps its content as it does there.
                     val width = widthDp ?: if (tablet) TABLET_WIDTH_DP else null
                     Box(if (width != null) Modifier.requiredWidth(width.dp) else Modifier) {
-                        HomeScreen(pairing = pairing, nav = HomeNavigation({}, {}, {}), shared = shared, vm = vm)
+                        HomeScreen(pairing = pairing, nav = HomeNavigation({}, {}, { libraryOpens += 1 }), shared = shared, vm = vm)
                     }
                 }
             }
@@ -141,6 +153,153 @@ class DiscoveryWidgetsTest {
     }
 
     @Test
+    fun theMonthStepsSayWhatTheyDo() {
+        setScreen()
+        compose.waitForText("Four")
+        assertTrue(compose.onAllNodesWithContentDescription("One month fewer").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(compose.onAllNodesWithContentDescription("One month more").fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
+    fun aVeryWideHomeSetsItsCardsSideBySide() {
+        setScreen(tablet = true, widthDp = LANDSCAPE_TABLET_DP)
+        compose.waitForText("Four")
+        val left = compose.onNodeWithTag("widget-suggestions").getUnclippedBoundsInRoot()
+        val right = compose.onNodeWithTag("widget-recently_added").getUnclippedBoundsInRoot()
+        assertTrue("$left and $right", right.left >= left.right || left.left >= right.right)
+        assertTrue("a card is ${left.width} wide", left.width.value < LANDSCAPE_TABLET_DP * 2 / 3)
+    }
+
+    private val albumRoutes = listOf("/api/app/library/recently-added", "/api/app/library/recently-released", "/api/app/suggestions")
+    private fun albumHits() = albumRoutes.map { api.hits(it) }
+
+    /** Home on screen with its grids read and this phone known to the shared holder. */
+    private fun homeReadyAt(level: Int) {
+        setScreen(appApiLevel = level)
+        compose.waitForText("Four")
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { shared.state.value.thisDeviceId == THIS_PHONE }
+        compose.waitForIdle()
+    }
+
+    /** Long enough for a refetch that should not happen to have happened. */
+    private fun settle() {
+        compose.waitForIdle()
+        Thread.sleep(NO_REFETCH_WAIT_MS)
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun fromLevel7AChangeToThisPhonesSelectionsRereadsTheAlbumGrids() {
+        homeReadyAt(APP_API_HOME_LEAVES_OUT_THIS_PHONE)
+        val before = albumHits()
+        // What the server does from level 7 once Four is selected for this phone.
+        api.suggestions.removeAll { it.second == "Four" }
+        compose.runOnIdle { shared.selectionsChanged(THIS_PHONE) }
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { albumHits() == before.map { it + 1 } }
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { inGrid("suggestions", "Four").fetchSemanticsNodes().isEmpty() }
+        inGrid("recently_released", "One").assertCountEquals(1)
+    }
+
+    @Test
+    fun belowLevel7AChangeToThisPhonesSelectionsReadsNothing() {
+        homeReadyAt(APP_API_HOME_LEAVES_OUT_THIS_PHONE - 1)
+        val before = albumHits()
+        compose.runOnIdle { shared.selectionsChanged(THIS_PHONE) }
+        settle()
+        assertEquals(before, albumHits())
+    }
+
+    @Test
+    fun aChangeToAnotherDevicesSelectionsReadsNothing() {
+        homeReadyAt(APP_API_HOME_LEAVES_OUT_THIS_PHONE)
+        val before = albumHits()
+        compose.runOnIdle { shared.selectionsChanged(THIS_PHONE + 1) }
+        settle()
+        assertEquals(before, albumHits())
+    }
+
+    private fun emptyFeeds() {
+        api.recentlyReleased.clear(); api.recentlyAdded.clear(); api.suggestions.clear()
+    }
+
+    @Test
+    fun belowLevel7AnEmptyGridSaysWhatItAlwaysSaid() {
+        emptyFeeds()
+        setScreen(appApiLevel = APP_API_HOME_LEAVES_OUT_THIS_PHONE - 1)
+        compose.waitForText("Nothing recently added.")
+        compose.onAllNodesWithText("Nothing recently released.").assertCountEquals(1)
+        compose.onAllNodesWithText("No suggestions yet.").assertCountEquals(1)
+        compose.onAllNodesWithText("already on this phone", substring = true).assertCountEquals(0)
+    }
+
+    /** The phone is enrolled under [name] (null: it isn't among the devices the server lists). */
+    private fun enrolledAs(name: String?) {
+        server.shutdown()
+        basket = FakeAppApi(devices = if (name != null) listOf(THIS_PHONE to name, 2L to "Car") else listOf(2L to "Car"))
+        api = FakeDashboardApi(basket)
+        api.disabled = mutableListOf("library", "devices", "most_played")
+        server = MockWebServer()
+        server.dispatcher = api
+        server.start()
+    }
+
+    @Test
+    fun fromLevel7AnEmptyGridNamesThisPhoneAsTheServerHasIt() {
+        enrolledAs("Pixel of alice")
+        setScreen(appApiLevel = APP_API_HOME_LEAVES_OUT_THIS_PHONE)
+        compose.waitForText("Nothing recently added that isn't already on Pixel of alice.")
+        compose.onAllNodesWithText("Nothing recently released that isn't already on Pixel of alice.").assertCountEquals(1)
+        compose.onAllNodesWithText("No suggestions that aren't already on Pixel of alice.").assertCountEquals(1)
+    }
+
+    @Test
+    fun fromLevel7AnEmptyGridNamesThisPhoneInFrenchToo() {
+        enrolledAs("Pixel of alice")
+        setScreen(appApiLevel = APP_API_HOME_LEAVES_OUT_THIS_PHONE, french = true)
+        compose.waitForText("Rien d'ajouté récemment qui ne soit déjà sur Pixel of alice.")
+        compose.onAllNodesWithText("Rien de sorti récemment qui ne soit déjà sur Pixel of alice.").assertCountEquals(1)
+        compose.onAllNodesWithText("Aucune suggestion qui ne soit déjà sur Pixel of alice.").assertCountEquals(1)
+    }
+
+    @Test
+    fun theNameIsThisPhonesEvenWhenTheHeaderShowsAnotherDevice() {
+        // The header's device is where staging goes, not who is asking: the
+        // server leaves out what is selected for THIS phone.
+        enrolledAs("Pixel of alice")
+        setScreen(appApiLevel = APP_API_HOME_LEAVES_OUT_THIS_PHONE)
+        compose.waitForText("Nothing recently added that isn't already on Pixel of alice.")
+        compose.runOnIdle { shared.chooseDevice(2L) }
+        compose.waitUntil(timeoutMillis = UI_WAIT_MS) { shared.state.value.destination?.id == 2L }
+        compose.waitForIdle()
+        compose.onAllNodesWithText("Nothing recently added that isn't already on Pixel of alice.").assertCountEquals(1)
+        compose.onAllNodesWithText("already on Car", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun fromLevel7WithoutTheNameAnEmptyGridSaysThisDevice() {
+        enrolledAs(null)
+        setScreen(appApiLevel = APP_API_HOME_LEAVES_OUT_THIS_PHONE)
+        compose.waitForText("Nothing recently added that isn't already on this device.")
+        compose.onAllNodesWithText("Nothing recently released that isn't already on this device.").assertCountEquals(1)
+        compose.onAllNodesWithText("No suggestions that aren't already on this device.").assertCountEquals(1)
+    }
+
+    @Test
+    fun fromLevel7WithoutTheNameAnEmptyGridSaysCetAppareil() {
+        enrolledAs(null)
+        setScreen(appApiLevel = APP_API_HOME_LEAVES_OUT_THIS_PHONE, french = true)
+        compose.waitForText("Rien d'ajouté récemment qui ne soit déjà sur cet appareil.")
+        compose.onAllNodesWithText("Aucune suggestion qui ne soit déjà sur cet appareil.").assertCountEquals(1)
+    }
+
+    @Test
+    fun aNameWithPercentAndApostropheShowsAsTyped() {
+        enrolledAs("Bob's 100% %1\$s phone")
+        setScreen(appApiLevel = APP_API_HOME_LEAVES_OUT_THIS_PHONE)
+        compose.waitForText("Nothing recently added that isn't already on Bob's 100% %1\$s phone.")
+    }
+
+    @Test
     fun aMonthsChangeRefetchesOnlyThatWidget() {
         setScreen()
         compose.waitForText("Four")
@@ -148,7 +307,7 @@ class DiscoveryWidgetsTest {
         val releasedBefore = api.hits("/api/app/library/recently-released")
         val suggestionsBefore = api.hits("/api/app/suggestions")
         // The "+" of Recently added: the widgets render in catalog order, suggestions (no stepper), added, released.
-        compose.onAllNodesWithText("+")[0].performClick()
+        compose.onAllNodesWithContentDescription("One month more")[0].performClick()
         compose.waitUntil(timeoutMillis = UI_WAIT_MS) { api.hits("/api/app/library/recently-added") == addedBefore + 1 }
         assertEquals(listOf(3, 4), api.monthsAsked["recently_added"])
         assertEquals(releasedBefore, api.hits("/api/app/library/recently-released"))
@@ -209,7 +368,7 @@ class DiscoveryWidgetsTest {
     }
 
     @Test
-    fun aSingleTapOnACoverDoesNothing() {
+    fun aSingleTapOnACoverOpensTheAlbumInTheLibraryAndStagesNothing() {
         setScreen()
         compose.waitForText("Four")
         inGrid("recently_released", "One")[0].performTouchInput { click() }
@@ -218,10 +377,10 @@ class DiscoveryWidgetsTest {
         compose.mainClock.advanceTimeBy(PAST_A_DOUBLE_TAP_MS)
         Thread.sleep(SETTLE_MS)
         compose.waitForIdle()
+        assertEquals(1, libraryOpens)
+        assertEquals(LibraryTarget("A", "One", details = true), shared.state.value.libraryTarget)
         assertTrue("a single tap wrote ${basket.staged}", basket.staged.isEmpty())
         compose.onAllNodes(hasTestTag("basket_flight"), useUnmergedTree = true).assertCountEquals(0)
-        compose.onAllNodes(isToggleable()).assertCountEquals(0)
-        compose.onAllNodesWithText("to the basket", substring = true).assertCountEquals(0)
     }
 
     @Test
@@ -278,7 +437,7 @@ class DiscoveryWidgetsTest {
         }
         for (id in listOf("recently_added", "recently_released")) {
             // The stepper is above "View library", never on its row.
-            val plus = compose.onNode(hasText("+") and hasAnyAncestor(hasTestTag("widget-$id"))).getUnclippedBoundsInRoot()
+            val plus = compose.onNode(hasContentDescription(res.getString(R.string.widget_months_more)) and hasAnyAncestor(hasTestTag("widget-$id"))).getUnclippedBoundsInRoot()
             val button = compose.onNode(hasText(viewLibrary) and hasAnyAncestor(hasTestTag("widget-$id")), useUnmergedTree = true)
                 .getUnclippedBoundsInRoot()
             assertTrue("in $id, \"+\" at $plus and \"$viewLibrary\" at $button", plus.bottom <= button.top)
@@ -289,8 +448,8 @@ class DiscoveryWidgetsTest {
                 assertTrue("in $id, \"+\" at $plus is not beside the title at $t", plus.left >= t.right && plus.top < t.bottom)
             }
             val row = compose.onNode(hasTestTag("widget-title-$id")).getUnclippedBoundsInRoot()
-            for (sign in listOf("−", "+")) {
-                val nodes = compose.onAllNodes(hasText(sign) and hasAnyAncestor(hasTestTag("widget-title-$id")))
+            for (sign in listOf(res.getString(R.string.widget_months_fewer), res.getString(R.string.widget_months_more))) {
+                val nodes = compose.onAllNodes(hasContentDescription(sign) and hasAnyAncestor(hasTestTag("widget-title-$id")))
                 assertEquals("\"$sign\" in the title row of $id", 1, nodes.fetchSemanticsNodes().size)
                 val b = nodes[0].getUnclippedBoundsInRoot()
                 assertTrue("\"$sign\" of $id at $b, row $row", b.left >= row.left && b.right <= row.right)
@@ -329,7 +488,8 @@ class DiscoveryWidgetsTest {
 
     @Test
     fun aTabletShowsMoreCoversARowAtAboutAPhonesCoverSize() {
-        // A landscape tablet's window: three a row made each cover a third of it.
+        // A landscape tablet's window, which Home splits into two columns: three a
+        // row would make each cover a third of a column's 600-odd dp.
         val (perRow, cover) = coversInTheFirstRow(widthDp = LANDSCAPE_TABLET_DP, tablet = true)
         assertTrue("$perRow covers a row", perRow >= MIN_TABLET_COVERS_A_ROW)
         assertTrue("each cover $cover dp wide", cover in PHONE_COVER_DP)
@@ -369,6 +529,8 @@ class DiscoveryWidgetsTest {
 
     private companion object {
         const val GRID_ALBUMS = 11
+        const val THIS_PHONE = 1L // FakeAppApi's whoami
+        const val NO_REFETCH_WAIT_MS = 1_000L
         const val LARGEST_FONT_SCALE = 2f
         const val TABLET_WIDTH_DP = 840
         const val NARROWEST_PHONE_DP = 320 // the smallest width Android's compatibility definition allows a phone
@@ -378,7 +540,7 @@ class DiscoveryWidgetsTest {
         const val PAST_A_DOUBLE_TAP_MS = 1_000L
         const val SIZE_TOLERANCE_DP = 0.5f
         const val LANDSCAPE_TABLET_DP = 1280 // a Pixel Tablet's width in landscape
-        const val MIN_TABLET_COVERS_A_ROW = 6
+        const val MIN_TABLET_COVERS_A_ROW = 4
         val PHONE_COVER_DP = 120f..180f
     }
 }

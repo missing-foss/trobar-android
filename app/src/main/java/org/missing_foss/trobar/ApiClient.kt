@@ -13,8 +13,11 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
+/** [estimatedSize] is what the server expects the track to take here: a
+ * transcoded file's size isn't known until it's written. Null from a
+ * server too old to send it. */
 data class TrackRef(val trackId: Long, val relativePath: String, val size: Long,
-                    val transcode: Boolean = false)
+                    val transcode: Boolean = false, val estimatedSize: Long? = null)
 data class TrackDeleteRef(val trackId: Long, val relativePath: String)
 data class Changes(val toDownload: List<TrackRef>, val toDelete: List<TrackDeleteRef>, val downloaded: List<TrackRef>,
                    val playlists: List<PlaylistRef> = emptyList())
@@ -26,12 +29,23 @@ data class PlaylistRef(val name: String, val filename: String, val content: Stri
  * offer Re-enroll instead of Retry. Subclasses IOException so existing broad
  * catches keep working. */
 class UnauthorizedException(message: String) : IOException(message)
+
+/** The server answered, and the answer was an error: not a failure to reach it. */
+class ServerErrorException(message: String, val code: Int) : IOException(message)
+
+/** HTTP 416: the bytes asked for to resume a download aren't in the file
+ * the server has now (it shrank: re-tagged, re-encoded). Only a fresh
+ * download from the start can help. */
+class RangeNotSatisfiableException(message: String) : IOException(message)
+
+private const val HTTP_RANGE_NOT_SATISFIABLE = 416
 /** `appApi` is the server's App API level (0 when the server predates it,
  * or sends anything but a number for it) -- the capability the Home and
  * Library tabs are gated on. */
 data class DeviceInfo(val name: String, val maxSizeBytes: Long?, val deviceType: String,
                       val artistImages: String? = null, val sourceOfTruth: String = "server",
-                      val appApi: Int = 0, val icon: String? = null)
+                      val appApi: Int = 0, val icon: String? = null,
+                      val transcodeFormat: String? = null)
 /** #34 recovery: how many uploaded device paths the server matched against its
  * library (marked downloaded) vs didn't recognize. */
 data class ManifestResult(val matched: Int, val unmatched: Int)
@@ -42,7 +56,11 @@ data class ManifestResult(val matched: Int, val unmatched: Int)
  * `fingerprint` is always the SOURCE audio's, even on a transcoding device
  * holding an MP3 — don't try to verify it against the local file, it won't
  * match, by design (see the server's provenance.py docstring). */
-data class FingerprintEntry(val trackId: Long, val fingerprint: String, val path: String)
+/** `seq` is the server's fingerprint_seq: strictly increasing as
+ * fingerprints are computed, the high-water mark for an incremental walk
+ * (null from a server too old to send it). */
+data class FingerprintEntry(val trackId: Long, val fingerprint: String, val path: String,
+                            val seq: Long? = null)
 /** `nextAfter` null means the cursor walk is done; `pending` can still be
  * > 0 on that last page — those tracks just don't have a server-computed
  * fingerprint YET, not an error. */
@@ -95,7 +113,8 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
             return DeviceInfo(json.optString("name", "?"), max, json.optString("device_type", "phone"),
                               artistImages, json.optString("source_of_truth", "server"),
                               appApi = (json.opt("app_api") as? Number)?.toInt() ?: 0,
-                              icon = if (json.isNull("icon")) null else json.optString("icon"))
+                              icon = if (json.isNull("icon")) null else json.optString("icon"),
+                              transcodeFormat = if (json.isNull("transcode_format")) null else json.optString("transcode_format"))
         }
     }
 
@@ -106,6 +125,15 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
         val body = json.toString().toRequestBody("application/json".toMediaType())
         val req = authed("${baseUrl()}/api/device/source-of-truth").method("PATCH", body).build()
         client.newCall(req).execute().use { resp -> requireSuccess(resp, "source-of-truth") }
+    }
+
+    /** This device's own artist images: null (off), "small" or "full". A
+     * server older than the route answers 404 (ServerErrorException.code). */
+    fun setArtistImages(value: String?) {
+        val json = JSONObject().put("artist_images", value ?: JSONObject.NULL)
+        val body = json.toString().toRequestBody("application/json".toMediaType())
+        val req = authed("${baseUrl()}/api/device/artist-images").method("PATCH", body).build()
+        client.newCall(req).execute().use { resp -> requireSuccess(resp, "artist-images") }
     }
 
     /** #34 recovery: tell a freshly re-enrolled device's server which tracks
@@ -155,12 +183,22 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
      * that cannot measure -- an older build, a revoked tree permission, a
      * scan that threw -- must reach this with null and not with a
      * default. */
-    fun reportStorage(freeBytes: Long, totalBytes: Long, foreignBytes: Long? = null) {
+    fun reportStorage(freeBytes: Long, totalBytes: Long, foreignBytes: Long? = null, reserveBytes: Long? = null) {
         val json = JSONObject().put("free_bytes", freeBytes).put("total_bytes", totalBytes)
         if (foreignBytes != null) json.put("foreign_bytes", foreignBytes)
+        if (reserveBytes != null) json.put("reserve_bytes", reserveBytes)
         val body = json.toString().toRequestBody("application/json".toMediaType())
         val req = authed("${baseUrl()}/api/device/storage").post(body).build()
         client.newCall(req).execute().use { resp -> requireSuccess(resp, "storage") }
+    }
+
+    /** One sync finished with no error: the server only counts it, for the
+     * thank-you card administrators see in the web UI. A server older than
+     * this call answers 404, which the caller ignores. */
+    fun reportSyncCompleted() {
+        val body = "{}".toRequestBody("application/json".toMediaType())
+        val req = authed("${baseUrl()}/api/device/sync-completed").post(body).build()
+        client.newCall(req).execute().use { resp -> requireSuccess(resp, "sync-completed") }
     }
 
     /** Lets the device set its own allocation from the Settings screen —
@@ -199,8 +237,13 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
      * page.nextAfter` until it's null (see [syncProvenanceFingerprints]).
      * `limit` is clamped to [FINGERPRINT_PAGE_MAX] server-side regardless
      * of what's asked for here. */
-    fun getFingerprintsPage(after: Long, limit: Int = FINGERPRINT_PAGE_DEFAULT): FingerprintPage {
-        val url = "${baseUrl()}/api/device/fingerprints?after=$after&limit=$limit"
+    fun getFingerprintsPage(
+        after: Long,
+        limit: Int = FINGERPRINT_PAGE_DEFAULT,
+        computedAfter: Long? = null,
+    ): FingerprintPage {
+        val since = computedAfter?.let { "&computed_after=$it" } ?: ""
+        val url = "${baseUrl()}/api/device/fingerprints?after=$after&limit=$limit$since"
         client.newCall(authed(url).build()).execute().use { resp ->
             requireSuccess(resp, "fingerprints")
             val body = JSONObject(resp.body?.string() ?: "{}")
@@ -208,7 +251,8 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
             body.optJSONArray("entries")?.let { arr ->
                 for (i in 0 until arr.length()) {
                     val o = arr.getJSONObject(i)
-                    entries.add(FingerprintEntry(o.getLong("track_id"), o.getString("fingerprint"), o.getString("path")))
+                    val seq = if (o.has("fingerprint_seq") && !o.isNull("fingerprint_seq")) o.getLong("fingerprint_seq") else null
+                    entries.add(FingerprintEntry(o.getLong("track_id"), o.getString("fingerprint"), o.getString("path"), seq))
                 }
             }
             val nextAfter = if (body.isNull("next_after")) null else body.optLong("next_after")
@@ -256,7 +300,8 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
             out.add(TrackRef(o.getLong("track_id"), o.getString("relative_path"), o.getLong("size"),
-                             o.optBoolean("transcode", false)))
+                             o.optBoolean("transcode", false),
+                             if (o.has("estimated_size")) o.getLong("estimated_size") else null))
         }
         return out
     }
@@ -280,6 +325,7 @@ class ApiClient(context: Context, private val serverUrl: String, private val tok
         if (!resp.isSuccessful) {
             val message = responseErrorMessage(resp, appContext.getString(R.string.api_error_file, trackId, resp.code))
             resp.close()
+            if (resp.code == HTTP_RANGE_NOT_SATISFIABLE) throw RangeNotSatisfiableException(message)
             throw IOException(message)
         }
         return resp
@@ -380,7 +426,7 @@ private const val ENROLL_TIMEOUT_SECONDS = 30L
 
 
 private const val HTTP_UNAUTHORIZED = 401
-private const val HTTP_NOT_FOUND = 404
+internal const val HTTP_NOT_FOUND = 404
 
 /** The server returns {"error": "..."} on API failures (device_api_error_json
  * in main.py) -- surface that text directly (e.g. in a Snackbar) instead of
@@ -399,5 +445,5 @@ internal fun responseErrorMessage(resp: Response, default: String): String {
 internal fun requireSuccess(context: Context, resp: Response, action: String) {
     val default = context.getString(R.string.api_error_generic, action, resp.code)
     if (resp.code == HTTP_UNAUTHORIZED) throw UnauthorizedException(responseErrorMessage(resp, default))
-    if (!resp.isSuccessful) throw IOException(responseErrorMessage(resp, default))
+    if (!resp.isSuccessful) throw ServerErrorException(responseErrorMessage(resp, default), resp.code)
 }

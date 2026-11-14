@@ -20,6 +20,16 @@ import androidx.core.content.ContextCompat
 
 data class StorageStats(val freeBytes: Long, val totalBytes: Long)
 
+/** The space a sync leaves free on a volume of [totalBytes]: 5 % of it, and
+ * never less than 1 GB, so a sync that just fits doesn't leave the phone at
+ * zero bytes, where apps, the camera and updates fail. The space check
+ * refuses a sync that would eat into it, and it is reported to the server
+ * so the web picker measures room against the same number. */
+fun spaceReserve(totalBytes: Long): Long = maxOf(RESERVE_FLOOR_BYTES, totalBytes / RESERVE_DIVISOR)
+
+private const val RESERVE_FLOOR_BYTES = 1_000_000_000L
+private const val RESERVE_DIVISOR = 20 // 5 %
+
 /** Free + total space of the SAF tree's underlying storage volume.
  *
  * Tries the standard Root.COLUMN_AVAILABLE_BYTES/COLUMN_CAPACITY_BYTES

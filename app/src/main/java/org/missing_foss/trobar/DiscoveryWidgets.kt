@@ -23,6 +23,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 
 /** The three album grids of the Home dashboard. Each loads its own list
  * and shows it deduplicated against its siblings' shown lists (the
@@ -41,7 +44,8 @@ object RecentlyReleasedWidget : Widget {
     @Composable
     override fun Content(data: Any, actions: WidgetActions) {
         val cards = DashboardDedup.recentlyReleased(grids(actions, id, data), actions.host.visible, actions.settings::coverLimitOf)
-        AlbumGridWidget(id, cards, actions, emptyText = R.string.widget_nothing_recently_released)
+        val empty = actions.emptyText(R.string.widget_nothing_recently_released, R.string.widget_nothing_recently_released_not_here)
+        AlbumGridWidget(id, cards, actions, emptyText = empty)
     }
 
     override fun titleControls(actions: WidgetActions) = monthsControl(id, actions)
@@ -55,7 +59,8 @@ object RecentlyAddedWidget : Widget {
     @Composable
     override fun Content(data: Any, actions: WidgetActions) {
         val cards = DashboardDedup.recentlyAdded(grids(actions, id, data), actions.host.visible, actions.settings::coverLimitOf)
-        AlbumGridWidget(id, cards, actions, emptyText = R.string.widget_nothing_recently_added)
+        val empty = actions.emptyText(R.string.widget_nothing_recently_added, R.string.widget_nothing_recently_added_not_here)
+        AlbumGridWidget(id, cards, actions, emptyText = empty)
     }
 
     override fun titleControls(actions: WidgetActions) = monthsControl(id, actions)
@@ -70,7 +75,7 @@ object SuggestionsWidget : Widget {
     override fun Content(data: Any, actions: WidgetActions) {
         val feed = data as Feed
         val cards = DashboardDedup.suggestions(grids(actions, id, feed.items), actions.host.visible, actions.settings::coverLimitOf)
-        AlbumGridWidget(id, cards, actions, emptyText = R.string.widget_no_suggestions)
+        AlbumGridWidget(id, cards, actions, emptyText = actions.emptyText(R.string.widget_no_suggestions, R.string.widget_no_suggestions_not_here))
     }
 
     private const val SUGGESTIONS_PERIOD = "6month"
@@ -88,13 +93,26 @@ private fun grids(actions: WidgetActions, id: String, data: Any): DashboardDedup
     return DashboardDedup.Grids(cards(WidgetIds.RECENTLY_RELEASED), cards(WidgetIds.RECENTLY_ADDED), cards(WidgetIds.SUGGESTIONS))
 }
 
+/** An empty grid's text: [notHere] when the server leaves out what is
+ * selected for this phone (level 7), since the grid may be empty for that
+ * alone; [plain] otherwise, as before. */
+@Composable
+private fun WidgetActions.emptyText(plain: Int, notHere: Int): String =
+    if (host.leavesOutThisPhone) {
+        // The name goes in as an argument, not into the text: the French word
+        // order holds, and a name with % or ' shows as it was typed.
+        stringResource(notHere, host.thisDeviceName ?: stringResource(R.string.widget_this_device))
+    } else {
+        stringResource(plain)
+    }
+
 /** The months stepper of a recently-* grid, for its card's title row. */
 private fun monthsControl(id: String, actions: WidgetActions): @Composable () -> Unit = {
     MonthsInline(actions.settings.months[id] ?: DEFAULT_MONTHS, onChange = { actions.onSetMonths(id, it) })
 }
 
 @Composable
-private fun AlbumGridWidget(id: String, cards: List<AlbumCard>, actions: WidgetActions, emptyText: Int) {
+private fun AlbumGridWidget(id: String, cards: List<AlbumCard>, actions: WidgetActions, emptyText: String) {
     Column {
         // A row to itself, so it never shares the width with anything that
         // could push it onto two lines.
@@ -103,7 +121,7 @@ private fun AlbumGridWidget(id: String, cards: List<AlbumCard>, actions: WidgetA
             TextButton(onClick = actions.onOpenLibrary) { Text(stringResource(R.string.widget_view_library)) }
         }
         if (cards.isEmpty()) {
-            Text(stringResource(emptyText), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+            Text(emptyText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
         } else {
             // Plain rows, not a lazy grid: the list is short and capped, sits
             // in a scrolling column, and must take the height its cards need.
@@ -125,6 +143,7 @@ private fun AlbumGridWidget(id: String, cards: List<AlbumCard>, actions: WidgetA
                                     val target = card.libraryArtist?.let { a -> card.libraryAlbum?.let { b -> "$a||$b" } }
                                     AlbumGridCard(
                                         card, actions.host.covers, Modifier.weight(1f),
+                                        onOpen = { actions.links.onOpenAlbum(card.libraryArtist.orEmpty(), card.libraryAlbum.orEmpty()) },
                                         onStage = target?.let { t -> { url, from -> actions.onStage(t, url, from) } },
                                     )
                                 }
@@ -139,13 +158,20 @@ private fun AlbumGridWidget(id: String, cards: List<AlbumCard>, actions: WidgetA
     }
 }
 
-/** One cover with its two caption lines; [onStage] null = not stageable,
- * and then a double-tap does nothing either. */
+/** One cover with its two caption lines: a tap opens the album, a
+ * double-tap stages it. [onStage] null = not in the library, and then
+ * neither does anything. */
 @Composable
-private fun AlbumGridCard(card: AlbumCard, covers: Covers, modifier: Modifier, onStage: ((coverUrl: String, from: Rect) -> Unit)?) {
+private fun AlbumGridCard(
+    card: AlbumCard,
+    covers: Covers,
+    modifier: Modifier,
+    onOpen: () -> Unit,
+    onStage: ((coverUrl: String, from: Rect) -> Unit)?,
+) {
     val url = card.imageUrl ?: covers.url(card.libraryArtist ?: card.artist, card.libraryAlbum ?: card.album)
     val label = stringResource(R.string.stage_action)
-    Column(if (onStage != null) modifier.stageOnDoubleTap(label) { from -> onStage(url, from) } else modifier) {
+    Column(if (onStage != null) modifier.openOnTapStageOnDoubleTap(label, onOpen) { from -> onStage(url, from) } else modifier) {
         TrobarImage(
             url = url, contentDescription = null, pairing = covers.pairing,
             modifier = Modifier.fillMaxWidth().aspectRatio(1f),
@@ -160,8 +186,16 @@ private fun AlbumGridCard(card: AlbumCard, covers: Covers, modifier: Modifier, o
 private fun MonthsInline(months: Int, onChange: (Int) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.widget_within), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-        IconButton(onClick = { onChange(months - 1) }, enabled = months > WidgetIds.MONTHS_RANGE.first) { Text("−") }
+        val fewer = stringResource(R.string.widget_months_fewer)
+        val more = stringResource(R.string.widget_months_more)
+        IconButton(
+            onClick = { onChange(months - 1) }, enabled = months > WidgetIds.MONTHS_RANGE.first,
+            modifier = Modifier.semantics { contentDescription = fewer },
+        ) { Text("−", modifier = Modifier.clearAndSetSemantics {}) }
         Text(pluralStringResource(R.plurals.widget_months, months, months), style = MaterialTheme.typography.bodySmall)
-        IconButton(onClick = { onChange(months + 1) }, enabled = months < WidgetIds.MONTHS_RANGE.last) { Text("+") }
+        IconButton(
+            onClick = { onChange(months + 1) }, enabled = months < WidgetIds.MONTHS_RANGE.last,
+            modifier = Modifier.semantics { contentDescription = more },
+        ) { Text("+", modifier = Modifier.clearAndSetSemantics {}) }
     }
 }

@@ -151,7 +151,10 @@ private fun AddByLink(state: SubscriptionsUiState, vm: SubscriptionsViewModel) {
 private fun SubscriptionRow(sub: PlaylistSubscription, busy: Boolean, onRefresh: () -> Unit, onRemove: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(sub.title ?: sub.url, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Glyph(sub.provider, providerName(sub.provider), PROVIDER_GLYPH_SIZE, MaterialTheme.colorScheme.outline)
+                Text(sub.title ?: sub.url, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             val (text, color) = subscriptionState(sub)
             if (text.isNotEmpty()) Text(text, style = MaterialTheme.typography.bodySmall, color = color)
         }
@@ -170,7 +173,13 @@ private fun SubscriptionRow(sub: PlaylistSubscription, busy: Boolean, onRefresh:
 @Composable
 private fun subscriptionState(sub: PlaylistSubscription): Pair<String, Color> = when {
     sub.lastError == "unavailable" -> stringResource(R.string.subs_unavailable) to MaterialTheme.colorScheme.error
-    sub.lastError != null -> stringResource(R.string.subs_fetch_failed) to MaterialTheme.colorScheme.error
+    sub.lastError != null -> stringResource(
+        when (sub.provider) {
+            "spotify_public" -> R.string.subs_fetch_failed_spotify
+            "tidal_public" -> R.string.subs_fetch_failed_tidal
+            else -> R.string.subs_fetch_failed
+        },
+    ) to MaterialTheme.colorScheme.error
     sub.trackCount == null -> "" to MaterialTheme.colorScheme.outline
     sub.trackCount > 0 && sub.matchedCount == 0 -> stringResource(R.string.subs_no_matches) to MaterialTheme.colorScheme.tertiary
     else -> stringResource(R.string.subs_match_count, sub.matchedCount ?: 0, sub.trackCount) to MaterialTheme.colorScheme.outline

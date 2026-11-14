@@ -107,7 +107,13 @@ fun CopyableError(text: String, onDismiss: (() -> Unit)? = null) {
 
 
 @Composable
-fun TileRow(icon: ImageVector, label: String, value: String, onClick: (() -> Unit)? = null) {
+fun TileRow(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    onClick: (() -> Unit)? = null,
+    description: String? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -123,6 +129,11 @@ fun TileRow(icon: ImageVector, label: String, value: String, onClick: (() -> Uni
                 Text(label, style = MaterialTheme.typography.bodyLarge)
                 Text(value, style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline)
+                if (description != null) {
+                    Text(description, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp))
+                }
             }
         }
         if (onClick == null) {
@@ -236,7 +247,9 @@ fun ChoiceRow(
  * request from. OkHttp refuses anything else with an IllegalArgumentException
  * at request time, so the check belongs where the address is stored, before
  * either probe can meet it. */
-fun isServerUrl(text: String): Boolean = text.trim().let { it.startsWith("http://") || it.startsWith("https://") }
+fun isServerUrl(text: String): Boolean = text.trim().let {
+    (it.startsWith("http://") || it.startsWith("https://")) && it.substringAfter("://").isNotEmpty()
+}
 
 @Composable
 fun EditValueDialog(

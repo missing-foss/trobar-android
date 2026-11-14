@@ -10,8 +10,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.staggeredgrid.items as gridItems
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ShoppingBasket
 import androidx.compose.material.icons.filled.Tune
@@ -37,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -48,6 +53,20 @@ import androidx.lifecycle.viewmodel.compose.viewModel
  * An id the account ordered but this build cannot render is a small
  * card saying so, kept in its place. All widgets off is a message and a
  * way to the preferences, as in the browser. */
+private fun widgetLinks(nav: HomeNavigation, shared: AppState, stagePlaylist: (Long, Rect) -> Unit) = WidgetLinks(
+    onOpenDevice = nav.onOpenDevice,
+    onOpenPlaylists = nav.onOpenPlaylists,
+    onOpenPlaylist = { id ->
+        shared.openPlaylist(id)
+        nav.onOpenPlaylists()
+    },
+    onStagePlaylist = stagePlaylist,
+    onOpenAlbum = { artist, album ->
+        shared.openInLibrary(LibraryTarget(artist, album, details = true))
+        nav.onOpenLibrary()
+    },
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -60,6 +79,7 @@ fun HomeScreen(
 ) {
     val state by vm.state.collectAsState()
     val sharedState by shared.state.collectAsState()
+    val thanksCardShown by Prefs.thanksCardShown(LocalContext.current).collectAsState(initial = false)
     val snackbar = remember { SnackbarHostState() }
     state.error?.let { message ->
         LaunchedEffect(message) {
@@ -77,6 +97,8 @@ fun HomeScreen(
             visible = state.orderedVisibleIds.toSet(),
             loaded = state.loaded,
             staging = state.staging,
+            leavesOutThisPhone = state.appApiLevel >= APP_API_HOME_LEAVES_OUT_THIS_PHONE,
+            thisDeviceName = sharedState.devices.firstOrNull { it.id == sharedState.thisDeviceId }?.name,
             covers = Covers(
                 pairing,
                 url = { artist, album -> urls.coverUrl(artist, album) },
@@ -84,6 +106,7 @@ fun HomeScreen(
             ),
         ),
         onOpenLibrary = nav.onOpenLibrary,
+        links = widgetLinks(nav, shared) { id, from -> answer(vm.stage("playlist", id.toString()), null, from) },
         onStage = { target, coverUrl, from -> answer(vm.stage("album", target), coverUrl, from) },
         onSetMonths = vm::setMonths,
     )
@@ -117,14 +140,20 @@ fun HomeScreen(
                     state.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                     state.orderedVisibleIds.isEmpty() -> EmptyDashboard(nav.onOpenPrefs)
                     else -> PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize()) {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize().testTag("dashboard"),
-                            contentPadding = PaddingValues(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            items(state.orderedVisibleIds.filter { shownOnHome(widgets[it], state.data[it]) }, key = { it }) { id ->
-                                WidgetCard(id, widgets[id], state.data[id], actions)
+                        val ids = state.orderedVisibleIds.filter { shownOnHome(widgets[it], state.data[it]) }
+                        val card: @Composable (String) -> Unit = { id -> WidgetCard(id, widgets[id], state.data[id], actions) }
+                        if (isCompactWidth()) {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize().testTag("dashboard"),
+                                contentPadding = PaddingValues(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                // Only when due: an empty item would still take a gap.
+                                if (thanksCardShown) item(key = "thanks_card") { ThanksCardIfDue() }
+                                items(ids, key = { it }) { id -> card(id) }
                             }
+                        } else {
+                            HomeColumns(ids, thanksCardShown, card)
                         }
                     }
                 }
@@ -205,3 +234,24 @@ private fun WidgetCard(id: String, widget: Widget?, data: WidgetData?, actions: 
         }
     }
 }
+
+/** A wide window's Home: as many columns as the width holds, so a card never
+ * stretches across a large tablet. */
+@Composable
+private fun HomeColumns(ids: List<String>, thanksCardShown: Boolean, card: @Composable (String) -> Unit) {
+    LazyVerticalStaggeredGrid(
+        columns = StaggeredGridCells.Adaptive(HOME_CARD_MIN_WIDTH),
+        modifier = Modifier.fillMaxSize().testTag("dashboard"),
+        contentPadding = PaddingValues(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalItemSpacing = 12.dp,
+    ) {
+        if (thanksCardShown) {
+            item(key = "thanks_card", span = StaggeredGridItemSpan.FullLine) { ThanksCardIfDue() }
+        }
+        gridItems(ids, key = { it }) { id -> card(id) }
+    }
+}
+
+// Wide enough that an 840 dp window keeps one column and its covers their size.
+private val HOME_CARD_MIN_WIDTH = 560.dp

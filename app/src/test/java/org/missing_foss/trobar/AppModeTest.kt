@@ -6,12 +6,9 @@
 
 package org.missing_foss.trobar
 
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import org.junit.runner.RunWith
 
-@RunWith(AndroidJUnit4::class)
 class AppModeTest {
     private val dap = DeviceProfile(hasTelephony = false, smallestWidthDp = 360)
     private val phone = DeviceProfile(hasTelephony = true, smallestWidthDp = 411)

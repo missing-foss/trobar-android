@@ -84,7 +84,7 @@ JSON-licensed artifact; see `app/build.gradle.kts`.)
   Copyright (C) The ZXing Authors
 - **kotlinx.coroutines** 1.11.0 (`org.jetbrains.kotlinx:kotlinx-coroutines-android`)
   — Copyright (C) JetBrains s.r.o.
-- **FreeDroidWarn** V1.14 (`com.github.woheller69:FreeDroidWarn`) — Copyright (C)
+- **FreeDroidWarn** V1.14 (vendored in `freedroidwarn/`) — Copyright (C)
   woheller69. Shows the notice about Google's developer-verification
   requirement. It supplies its own dialog strings and translations, so the text
   a user reads there is upstream's rather than Trobar's — including a sentence
